@@ -180,13 +180,20 @@ textarea.inp{min-height:84px;resize:vertical}
 .rate input{width:100%;accent-color:var(--accent)}
 .rate output{font-family:var(--f-display);font-size:28px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
 .rate output small{font-size:14px;color:var(--muted)}
+.dish{border:1px solid var(--line);border-radius:14px;padding:12px;background:var(--surface);display:grid;gap:8px;margin-bottom:8px}
+.dish .top{display:flex;gap:8px;align-items:center}
+.dish .top .inp{flex:1}
+.dishlist .row2{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--line)}
+.dishlist .row2:last-child{border-bottom:0}
+.score{font-family:var(--f-display);font-weight:600;font-size:20px;font-variant-numeric:tabular-nums;text-align:right}
+.score small{font-size:12px;color:var(--muted);font-family:var(--f-body);font-weight:400}
 .legform{border:1px solid var(--line);border-radius:14px;padding:12px;background:var(--surface);display:grid;gap:10px;margin-bottom:10px}
 .legform .hd{display:flex;align-items:center;justify-content:space-between;font-weight:600}
 .legform .mrow{display:flex;gap:10px;align-items:center;font-size:13.5px;color:var(--muted)}
 .legform .mrow input{width:90px}
 
 /* detail */
-.hero{position:relative;aspect-ratio:4/3;background:var(--accent-soft);max-width:100%;overflow:hidden;margin:-12px -16px 0;width:calc(100% + 32px)}
+.hero{position:relative;aspect-ratio:4/3;background:var(--accent-soft);max-width:none;overflow:hidden;margin:-12px -16px 0;width:calc(100% + 32px)}
 .hero img{width:100%;height:100%;object-fit:cover;display:block}
 .hero .nophoto{position:absolute;inset:0;display:grid;place-items:center;color:var(--accent);opacity:.6}
 .d-title{font-family:var(--f-display);font-size:28px;font-weight:600;margin:14px 0 2px;line-height:1.15;text-wrap:balance}
@@ -279,18 +286,21 @@ const ICON={back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
  right:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg>'};
 const MODES=[["car","🚗","Car",1.22],["train","🚆","Train",1.15],["plane","✈️","Plane",1.0],["bus","🚌","Bus/coach",1.25],["ferry","⛴️","Ferry",1.05],["walk","🚶","Walk",1.2],["bike","🚲","Bike",1.2]];
 const CATS=[
- ["datenight","🌙","Date night",{cocktail:true,ph:"Friday date night"}],
- ["dinner","🍝","Dinner out",{ph:"Dinner at Le Relais"}],
+ ["datenight","🌙","Date night",{cocktail:true,food:true,ph:"Friday date night"}],
+ ["dinner","🍝","Dinner out",{food:true,ph:"Dinner at Le Relais"}],
  ["cocktail","🍸","New cocktail",{cocktail:true,home:true,ph:"Cocktail night"}],
  ["outfit","👗","Outfit check",{home:true,ph:"Outfit check"}],
  ["dayout","🎡","Day out",{ph:"Day at the museum"}],
- ["movie","🎬","Movie night",{home:true,ph:"Film night"}],
+ ["nightin","🛋️","Night in",{home:true,food:true,cocktail:true,ph:"Films and homemade pizza"}],
  ["cooking","🍳","Cooking together",{home:true,ph:"Homemade pasta night"}],
- ["trip","✈️","Trip away",{trip:true,ph:"Weekend in West Wales"}],
+ ["staycation","🏡","UK stay",{trip:true,stay:true,ph:"Lodge weekend in West Wales"}],
+ ["trip","✈️","Trip away",{trip:true,stay:true,ph:"Long weekend in Paris"}],
  ["milestone","❤️","Milestone",{home:true,ph:"Became official"}],
  ["other","✨","Something else",{ph:"Sunset walk"}]];
 const CAT=Object.fromEntries(CATS.map(c=>[c[0],{icon:c[1],label:c[2],...c[3]}]));
-const catOf=m=>m.category&&CAT[m.category]?m.category:m.kind==="trip"?"trip":m.kind==="milestone"?"milestone":"datenight";
+const catOf=m=>m.category==="movie"?"nightin":m.category&&CAT[m.category]?m.category:m.kind==="trip"?"trip":m.kind==="milestone"?"milestone":"datenight";
+const STAYS=["Lodge","Holiday home","Cottage","Hotel","B&B","Cabin","Glamping","Camping","Airbnb"];
+const dishAvg=m=>{const v=(m.dishes||[]).map(d=>d.rating).filter(x=>x!=null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null};
 const MODE=Object.fromEntries(MODES.map(m=>[m[0],{icon:m[1],label:m[2],f:m[3]}]));
 const fmtDate=(d,o={day:"numeric",month:"short",year:"numeric"})=>{if(!d)return"";const [y,m,dd]=d.split("-").map(Number);return new Date(y,m-1,dd).toLocaleDateString("en-GB",o)};
 const todayStr=()=>{const t=new Date();return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`};
@@ -449,7 +459,7 @@ function renderTimeline(){
   let h=`<h2 class="sec">Our timeline</h2><p class="muted" style="margin-top:-4px">Scroll to replay it from the start.</p>${filt}<div class="tl">`;let yr="";
   for(const m of ms){const y=(m.date||"").slice(0,4);if(y!==yr){yr=y;h+=`<div class="tl-year">${esc(y)}</div>`}
     const mi=memMiles(m);
-    h+=`<button class="tl-item" type="button" onclick="openDetail('${esc(m.id)}')"><span class="tl-dot ${m.kind==="milestone"?"ms":""}">${m.thumb?`<img src="${m.thumb}" alt="">`:m.kind==="milestone"?HEART:`<span style="font-size:22px">${CAT[catOf(m)].icon}</span>`}</span><span class="tl-body"><span class="tl-title">${esc(m.title)}</span><span class="tl-meta" style="display:block">${esc(fmtDate(m.date))}${m.endDate&&m.endDate!==m.date?" – "+esc(fmtDate(m.endDate)):""}${m.place?" · "+esc(m.place.name):""}</span><span class="tl-tags"><span class="tag">${CAT[catOf(m)].icon} ${esc(CAT[catOf(m)].label)}</span>${m.cocktail?.name&&catOf(m)!=="cocktail"?`<span class="tag">🍸 ${esc(m.cocktail.name)}</span>`:""}${ratingTags(m)}${mi?`<span class="tag">${fmtN(mi)} mi</span>`:""}${m.photoCount?`<span class="tag">${m.photoCount} photo${m.photoCount>1?"s":""}</span>`:""}${m.videoCount?`<span class="tag">${m.videoCount} video${m.videoCount>1?"s":""}</span>`:""}${m.example?`<span class="tag">Example</span>`:""}</span></span></button>`}
+    h+=`<button class="tl-item" type="button" onclick="openDetail('${esc(m.id)}')"><span class="tl-dot ${m.kind==="milestone"?"ms":""}">${m.thumb?`<img src="${m.thumb}" alt="">`:m.kind==="milestone"?HEART:`<span style="font-size:22px">${CAT[catOf(m)].icon}</span>`}</span><span class="tl-body"><span class="tl-title">${esc(m.title)}</span><span class="tl-meta" style="display:block">${esc(fmtDate(m.date))}${m.endDate&&m.endDate!==m.date?" – "+esc(fmtDate(m.endDate)):""}${m.place?" · "+esc(m.place.name):""}</span><span class="tl-tags"><span class="tag">${CAT[catOf(m)].icon} ${esc(CAT[catOf(m)].label)}</span>${m.cocktail?.name&&catOf(m)!=="cocktail"?`<span class="tag">🍸 ${esc(m.cocktail.name)}</span>`:""}${dishAvg(m)!=null?`<span class="tag">🍽 ${dishAvg(m).toFixed(1)}/10</span>`:""}${m.stay?.type?`<span class="tag">${esc(m.stay.type)}</span>`:""}${ratingTags(m)}${mi?`<span class="tag">${fmtN(mi)} mi</span>`:""}${m.photoCount?`<span class="tag">${m.photoCount} photo${m.photoCount>1?"s":""}</span>`:""}${m.videoCount?`<span class="tag">${m.videoCount} video${m.videoCount>1?"s":""}</span>`:""}${m.example?`<span class="tag">Example</span>`:""}</span></span></button>`}
   $("#timeline").innerHTML=h+"</div>";
 }
 function renderMiles(){
@@ -477,6 +487,8 @@ function renderUs(){
   let h=`<h2 class="sec">Us in numbers</h2><div class="tiles">${tiles.map(t=>`<div class="card tile"><b>${t[0]}</b><span>${t[1]}</span></div>`).join("")}</div>
   <div class="card" style="margin-top:8px;padding:12px 14px;display:flex;justify-content:space-around;text-align:center"><div><div class="bigmiles" style="font-size:30px">${avg("a")}</div><span class="muted" style="font-size:13px">${esc(nameOf("a"))}’s average rating</span></div><div><div class="bigmiles" style="font-size:30px">${avg("b")}</div><span class="muted" style="font-size:13px">${esc(nameOf("b"))}’s average rating</span></div></div>`;
   if(fav)h+=`<h2 class="sec" style="font-size:18px">Favourite date so far</h2><button class="card fav" type="button" onclick="openDetail('${esc(fav.id)}')">${fav.thumb?`<img src="${fav.thumb}" alt="">`:""}<div class="ov"><small>${esc(fmtDate(fav.date))}${fav.place?" · "+esc(fav.place.name):""}</small><div>${esc(fav.title)}</div></div></button>`;
+  const allDishes=ms.flatMap(m=>(m.dishes||[]).filter(d=>d.rating!=null).map(d=>({...d,m}))).sort((a,b)=>b.rating-a.rating).slice(0,5);
+  if(allDishes.length)h+=`<h2 class="sec" style="font-size:18px">Best dishes so far</h2><div class="card dishlist">${allDishes.map(d=>`<button type="button" class="row2" style="width:100%;background:none;border:0;border-bottom:1px solid var(--line);text-align:left" onclick="openDetail('${esc(d.m.id)}')"><span style="min-width:0"><b>${esc(d.name)}</b><br><span class="muted" style="font-size:13px">${esc(d.m.venue||d.m.place?.name||d.m.title)} · ${esc(fmtDate(d.m.date))}</span></span><span class="score">${d.rating}<small>/10</small></span></button>`).join("")}</div>`;
   h+=`<h2 class="sec" style="font-size:18px">Our cocktail book</h2>`+(book.length?`<div class="card">${book.map(m=>`<button type="button" class="leg" style="width:100%;background:none;border:0;border-bottom:1px solid var(--line);text-align:left" onclick="openDetail('${esc(m.id)}')"><span class="ic">🍸</span><span style="min-width:0"><b>${esc(m.cocktail.name)}</b><br><span class="muted" style="font-size:13px">${esc(m.cocktail.ingredients||"")}${m.cocktail.ingredients?" · ":""}${esc(fmtDate(m.date))}</span></span><span class="mi">${m.ratings&&Object.keys(m.ratings).length===2?(Object.values(m.ratings).reduce((a,b)=>a+b,0)/2).toFixed(1):""}<small>${m.ratings&&Object.keys(m.ratings).length===2?"/10":""}</small></span></button>`).join("")}</div>`:`<p class="muted">Every cocktail you make before a date gets saved here with its recipe. Add one as a “New cocktail”, or fill in the cocktail on a date night.</p>`);
   const ro=S.mode!=="live"||!S.canWrite;
   h+=`<h2 class="sec" style="font-size:18px">About us</h2><div class="card" style="padding:14px">
@@ -525,6 +537,8 @@ function openDetail(id){
       ${m.example?`<div class="notice" style="margin-top:10px">This is an example memory for the preview.</div>`:""}
       ${m.story?`<div class="d-story">${esc(m.story)}</div>`:""}
       ${m.cocktail?.name?`<div class="card" style="padding:12px 14px;margin:12px 0;display:flex;gap:12px"><span style="font-size:26px">🍸</span><span style="min-width:0"><span class="lab">${catOf(m)==="cocktail"?"The cocktail":"Cocktail of the night"}</span><br><b style="font-family:var(--f-display);font-size:19px">${esc(m.cocktail.name)}</b>${m.cocktail.ingredients?`<br><span class="muted" style="white-space:pre-wrap">${esc(m.cocktail.ingredients)}</span>`:""}</span></div>`:""}
+      ${m.stay?`<div class="card" style="padding:12px 14px;margin:12px 0;display:flex;gap:12px;align-items:center"><span style="font-size:26px">${CAT[catOf(m)].icon}</span><span style="min-width:0"><span class="lab">Where we stayed</span><br><b style="font-family:var(--f-display);font-size:19px">${esc(m.stay.name||m.stay.type)}</b>${m.stay.name&&m.stay.type?`<br><span class="muted">${esc(m.stay.type)}</span>`:""}</span></div>`:""}
+      ${m.dishes?.length?`<div class="row" style="justify-content:space-between;margin:14px 0 6px"><span class="lab">What we ate</span>${dishAvg(m)!=null?`<span class="tag">Food ${dishAvg(m).toFixed(1)}/10</span>`:""}</div><div class="card dishlist">${m.dishes.map(d=>`<div class="row2"><span style="min-width:0"><b>${esc(d.name)}</b><br><span class="muted" style="font-size:13px">${d.who==="both"?"Shared":d.who?esc(nameOf(d.who))+"’s":""}</span></span><span class="score">${d.rating!=null?`${d.rating}<small>/10</small>`:`<small>not scored</small>`}</span></div>`).join("")}</div>`:""}
       ${m.favourite?`<div class="fav-moment">“${esc(m.favourite)}”</div>`:""}
       <div class="facts">${m.venue?`<div><small>Restaurant / activity</small><b>${esc(m.venue)}</b></div>`:""}${m.plannedBy?`<div><small>${catOf(m)==="cocktail"?"Made by":"Planned by"}</small><b>${esc(nameOf(m.plannedBy))}</b></div>`:""}${legs.length?`<div><small>Travelled</small><b>${fmtN(memMiles(m))} miles</b></div>`:""}</div>
       ${m.kind!=="milestone"||Object.keys(r).length?`<div class="card ratingbox"><div class="lab" style="margin-bottom:6px">Our rating</div>${rate}</div>`:""}
@@ -604,7 +618,7 @@ function openForm(m,existingPhotos){
   if(S.mode==="live"&&!S.role){askWho();return}
   const isNew=!m;
   const f={kind:"date",category:"datenight",cocktail:{name:"",ingredients:""},title:"",date:todayStr(),endDate:"",place:null,venue:"",story:"",favourite:"",plannedBy:"",journeys:[],...(m?JSON.parse(JSON.stringify(m)):{})};
-  f.category=m?catOf(m):"datenight";f.cocktail={name:"",ingredients:"",...(f.cocktail||{})};
+  f.category=m?catOf(m):"datenight";f.dishes=JSON.parse(JSON.stringify(m?.dishes||[]));f.stay={type:"",name:"",...(m?.stay||{})};f.cocktail={name:"",ingredients:"",...(f.cocktail||{})};
   let myRating=m?.ratings?.[S.role]??null;
   let photos=(existingPhotos||[]).map(p=>({id:p.id,path:p.path,kind:p.kind||"photo",data:p.data}));const removed=[];
   const p=openPage(`<div class="page-head"><button class="iconbtn" data-x aria-label="Cancel">${ICON.close}</button><h3>${isNew?"Add a memory":"Edit memory"}</h3><span style="width:40px"></span></div>
@@ -614,8 +628,10 @@ function openForm(m,existingPhotos){
     <div class="two"><div class="f"><label for="fdate">Date</label><input class="inp" type="date" id="fdate" value="${esc(f.date)}"></div><div class="f" id="endWrap"><label for="fend">Last day</label><input class="inp" type="date" id="fend" value="${esc(f.endDate||"")}"></div></div>
     <div class="f"><span class="lab" id="placeLab">Where</span><div id="fplace"></div></div>
     <div class="f" id="ckWrap"><span class="lab" id="ckLab">Cocktail of the night</span><input class="inp" id="ckName" placeholder="Name it, e.g. Passionfruit spritz" value="${esc(f.cocktail.name)}" aria-label="Cocktail name"><textarea class="inp" id="ckIng" placeholder="What went in it" style="min-height:64px" aria-label="Cocktail ingredients">${esc(f.cocktail.ingredients)}</textarea><span class="muted" style="font-size:12.5px" id="ckHint">Made one while getting ready? It goes in your cocktail book.</span></div>
+    <div class="f" id="stayWrap"><span class="lab">Where we stayed</span><div class="chips" id="stayType">${STAYS.map(t=>`<button type="button" class="chip" data-st="${esc(t)}" aria-pressed="${f.stay.type===t}">${esc(t)}</button>`).join("")}</div><input class="inp" id="stayName" placeholder="Name of the place, e.g. Bluestone lodge" value="${esc(f.stay.name)}" aria-label="Name of where you stayed"></div>
     <div class="f" id="venueWrap"><label for="fvenue">Restaurant or activity</label><input class="inp" id="fvenue" placeholder="Le Relais" value="${esc(f.venue)}"></div>
     <div class="f"><label for="fstory">What we did</label><textarea class="inp" id="fstory" placeholder="Drinks by the sea, then dinner and a walk through town">${esc(f.story)}</textarea></div>
+    <div class="f" id="foodWrap"><span class="lab">What we ate</span><span class="muted" style="font-size:13px;margin-top:-2px">Add each dish and give it its own score out of 10, separate from the date rating.</span><div id="dishes"></div><button type="button" class="btn ghost" id="addDish">+ Add a dish</button></div>
     <div class="f"><label for="ffav">Favourite moment</label><input class="inp" id="ffav" placeholder="Watching the lights come on" value="${esc(f.favourite)}"></div>
     <div class="f"><span class="lab">Photos & videos</span><div class="thumbs" id="fph"></div><span class="muted" style="font-size:12.5px">Videos can be up to 50 MB each, roughly 30 seconds filmed on a phone.</span></div>
     <div class="f" id="rateWrap"><span class="lab">Your rating</span><label class="row" style="font-size:14px;text-transform:none;letter-spacing:0;font-weight:400;color:var(--ink)"><input type="checkbox" id="frateOn" ${myRating!=null||isNew?"checked":""}> Include my rating</label><div class="rate" id="rateBox"><input type="range" min="1" max="10" id="frate" value="${myRating??7}" aria-label="Your rating out of 10"><output id="frateo">${myRating??7}<small>/10</small></output></div><span class="muted" style="font-size:12.5px">Out of 10. ${esc(nameOf(other(S.role||"a")))} won’t see your score until they’ve added theirs.</span></div>
@@ -626,7 +642,7 @@ function openForm(m,existingPhotos){
   const pf=placeField($("#fplace",p),f.place,x=>{f.place=x;if(x&&!$("#ftitle",p).value)$("#ftitle",p).value=x.name},{label:"Search or name the place"});
   const syncKind=()=>{const c=CAT[f.category];f.kind=c.trip?"trip":f.category==="milestone"?"milestone":"date";
     $("#endWrap",p).style.visibility=c.trip?"visible":"hidden";$("#placeLab",p).textContent=c.home?"Where (optional, skip it if you were at home)":"Where";
-    $("#venueWrap",p).hidden=!!c.home;$("#planWrap",p).hidden=f.category==="milestone";$("#planLab",p).textContent=f.category==="cocktail"?"Who made it?":f.category==="outfit"?"Whose idea?":"Who planned it?";
+    $("#venueWrap",p).hidden=!!c.home||!!c.stay;$("#stayWrap",p).hidden=!c.stay;$("#foodWrap",p).hidden=!c.food;$("#planWrap",p).hidden=f.category==="milestone";$("#planLab",p).textContent=f.category==="cocktail"?"Who made it?":f.category==="outfit"?"Whose idea?":"Who planned it?";
     $("#ckWrap",p).hidden=!c.cocktail;$("#ckLab",p).textContent=f.category==="cocktail"?"The cocktail":"Cocktail of the night (optional)";$("#ckHint",p).hidden=f.category==="cocktail";
     $("#ftitle",p).placeholder=c.ph};
   syncKind();
@@ -638,6 +654,25 @@ function openForm(m,existingPhotos){
     $("#fphin",p).onchange=async e=>{const files=[...e.target.files];if(!files.length)return;const b=busy(`Preparing ${files.length} file${files.length>1?"s":""}…`);for(const [i,file] of files.entries()){b.set(`Preparing ${i+1} of ${files.length}…`);try{if(file.type.startsWith("video/")){if(file.size>50*1024*1024){toast(`That video is ${Math.round(file.size/1048576)} MB. Videos need to be under 50 MB, so trim it first.`);continue}photos.push({kind:"video",file,data:URL.createObjectURL(file),poster:await videoPoster(file)})}else photos.push({kind:"photo",data:await compress(file,2000,1400000,.86)})}catch(er){toast("One file couldn’t be read")}}b.done();drawPh()}};
   $("#fph",p).addEventListener("click",e=>{const r=e.target.closest("[data-rm]");if(r){const [x]=photos.splice(+r.dataset.rm,1);if(x.id)removed.push(x);drawPh()}});
   drawPh();
+  // stay type
+  $("#stayType",p).onclick=e=>{const c=e.target.closest("[data-st]");if(!c)return;f.stay.type=f.stay.type===c.dataset.st?"":c.dataset.st;$$("#stayType .chip",p).forEach(x=>x.setAttribute("aria-pressed",x.dataset.st===f.stay.type))};
+  // dishes
+  const dishes=f.dishes;
+  const drawDishes=()=>{const host=$("#dishes",p);host.innerHTML=dishes.map((d,i)=>`<div class="dish" data-i="${i}">
+      <div class="top"><input class="inp" data-dn placeholder="Dish, e.g. Garlic king prawns" value="${esc(d.name||"")}" aria-label="Dish name"><button type="button" class="btn ghost small" data-drm>Remove</button></div>
+      <div class="chips">${[["a",nameOf("a")],["b",nameOf("b")],["both","Shared"]].map(w=>`<button type="button" class="chip" data-dw="${w[0]}" aria-pressed="${d.who===w[0]}">${esc(w[1])}</button>`).join("")}</div>
+      <label class="row" style="font-size:14px"><input type="checkbox" data-don ${d.rating!=null?"checked":""}> Score it</label>
+      <div class="rate" data-drb style="opacity:${d.rating!=null?1:.4}"><input type="range" min="1" max="10" value="${d.rating??7}" data-dr aria-label="Dish score out of 10"><output>${d.rating??7}<small>/10</small></output></div>
+    </div>`).join("")};
+  drawDishes();
+  $("#dishes",p).addEventListener("input",e=>{const box=e.target.closest(".dish");if(!box)return;const d=dishes[+box.dataset.i];
+    if(e.target.matches("[data-dn]"))d.name=e.target.value;
+    if(e.target.matches("[data-dr]")){d.rating=+e.target.value;$("[data-don]",box).checked=true;$("[data-drb]",box).style.opacity=1;$("output",box).innerHTML=e.target.value+"<small>/10</small>"}});
+  $("#dishes",p).addEventListener("change",e=>{const box=e.target.closest(".dish");if(!box||!e.target.matches("[data-don]"))return;const d=dishes[+box.dataset.i];if(e.target.checked){d.rating=+$("[data-dr]",box).value;$("[data-drb]",box).style.opacity=1}else{d.rating=null;$("[data-drb]",box).style.opacity=.4}});
+  $("#dishes",p).addEventListener("click",e=>{const box=e.target.closest(".dish");if(!box)return;const i=+box.dataset.i;
+    if(e.target.closest("[data-drm]")){dishes.splice(i,1);drawDishes();return}
+    const w=e.target.closest("[data-dw]");if(w){dishes[i].who=dishes[i].who===w.dataset.dw?"":w.dataset.dw;$$("[data-dw]",box).forEach(x=>x.setAttribute("aria-pressed",x.dataset.dw===dishes[i].who))}});
+  $("#addDish",p).onclick=()=>{dishes.push({name:"",who:S.role||"",rating:null});drawDishes();$("#dishes",p).lastElementChild?.querySelector("[data-dn]")?.focus()};
   // journeys
   const legs=f.journeys;const legFields=[];
   const drawLegs=()=>{const host=$("#legs",p);host.innerHTML="";legFields.length=0;
@@ -667,7 +702,8 @@ function openForm(m,existingPhotos){
     const title=$("#ftitle",p).value.trim();if(!title){toast("Give it a title first");$("#ftitle",p).focus();return}
     const date=$("#fdate",p).value;if(!date){toast("Add the date");return}
     if(!C.home&&!f.place){toast("Pick where it was, so it can go on the map");return}
-    const doc={kind:f.kind,category:f.category,cocktail:C.cocktail&&ckName?{name:ckName,ingredients:ckIng}:null,title,date,endDate:f.kind==="trip"?($("#fend",p).value||""):"",place:f.place||null,venue:C.home?"":$("#fvenue",p).value.trim(),story:$("#fstory",p).value.trim(),favourite:$("#ffav",p).value.trim(),plannedBy:f.kind==="milestone"?"":f.plannedBy,
+    const stayName=$("#stayName",p).value.trim();
+    const doc={kind:f.kind,category:f.category,dishes:C.food?dishes.filter(d=>(d.name||"").trim()).map(d=>({name:d.name.trim(),who:d.who||"",rating:d.rating??null})):[],stay:C.stay&&(f.stay.type||stayName)?{type:f.stay.type||"",name:stayName}:null,cocktail:C.cocktail&&ckName?{name:ckName,ingredients:ckIng}:null,title,date,endDate:f.kind==="trip"?($("#fend",p).value||""):"",place:f.place||null,venue:C.home||C.stay?"":$("#fvenue",p).value.trim(),story:$("#fstory",p).value.trim(),favourite:$("#ffav",p).value.trim(),plannedBy:f.kind==="milestone"?"":f.plannedBy,
       journeys:legs.filter(l=>l.from&&l.to).map(l=>({date:l.date||date,from:l.from,to:l.to,mode:l.mode||"car",...(l.manual?{manual:true,miles:l.miles}:{})})),
       ratings:{...(m?.ratings||{})},photoCount:photos.length,updatedAt:new Date().toISOString(),updatedBy:S.role||"a"};
     if(rOn.checked)doc.ratings[S.role||"a"]=+rr.value;else delete doc.ratings[S.role||"a"];
