@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Spish &amp; Ollie’s Memory Map</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Memory Map">
+<meta name="theme-color" content="#f6ede4">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-512.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Figtree:wght@400;500;600;700&display=swap">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="places.js"></script>
+<style>
+/* Layout: one-screen app — header, a full-bleed map or scrolling view, bottom tab bar. Scrapbook warmth from their own mockups. */
+:root{
+  --bg:#f6ede4; --surface:#fffaf5; --sunk:#efe3d8; --ink:#2b1b1d; --muted:#7c6567; --line:#e3d2c6;
+  --accent:#c7323e; --accent-soft:#f6d9d6; --on-accent:#fff;
+  --sea:#d9e6e8; --land:#f4e9dc; --coast:#cdb7a2; --route:#c7323e;
+  --shadow:0 6px 24px rgba(70,30,30,.12);
+  --f-display:"Fraunces", Georgia, "Times New Roman", serif;
+  --f-body:"Figtree", -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#1c1315; --surface:#271b1e; --sunk:#32252a; --ink:#f5e9e3; --muted:#b9a19f; --line:#433236;
+  --accent:#f0646f; --accent-soft:#4a2328; --on-accent:#1c1315;
+  --sea:#17242b; --land:#2c2224; --coast:#4c3a3b; --route:#f0646f; --shadow:0 6px 24px rgba(0,0,0,.4); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#1c1315; --surface:#271b1e; --sunk:#32252a; --ink:#f5e9e3; --muted:#b9a19f; --line:#433236;
+  --accent:#f0646f; --accent-soft:#4a2328; --on-accent:#1c1315;
+  --sea:#17242b; --land:#2c2224; --coast:#4c3a3b; --route:#f0646f; --shadow:0 6px 24px rgba(0,0,0,.4); color-scheme:dark}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0}
+[hidden]{display:none!important}
+img{max-width:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;overflow:hidden;-webkit-tap-highlight-color:transparent}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.app{height:100%;display:flex;flex-direction:column;max-width:720px;margin:0 auto;position:relative;padding-top:env(safe-area-inset-top,0px)}
+header.top{display:flex;align-items:center;gap:12px;padding:10px 16px 8px}
+.couple{font-family:var(--f-display);font-size:24px;font-weight:600;line-height:1.1;letter-spacing:-.01em}
+.couple .h{color:var(--accent);font-size:.8em;margin:0 .15em}
+.since{font-size:12.5px;color:var(--muted)}
+.top .grow{flex:1;min-width:0}
+.me-chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 11px;font-size:12.5px;color:var(--muted)}
+main{flex:1;min-height:0;position:relative}
+.view{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.view[hidden]{display:none!important}
+.pad{padding:4px 16px 110px}
+nav.tabs{display:flex;align-items:center;justify-content:space-around;background:var(--surface);border-top:1px solid var(--line);padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px))}
+nav.tabs button{background:none;border:0;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;color:var(--muted);padding:4px 8px;min-width:56px}
+nav.tabs button svg{width:22px;height:22px}
+nav.tabs button[aria-current="page"]{color:var(--accent);font-weight:600}
+nav.tabs .add{width:48px;height:48px;border-radius:50%;background:var(--accent);color:var(--on-accent);justify-content:center;min-width:0;padding:0;box-shadow:var(--shadow);margin-top:-14px}
+nav.tabs .add svg{width:24px;height:24px}
+
+/* map */
+.map{position:absolute;inset:0;overflow:hidden;background:var(--sea);z-index:0}
+.leaflet-container{font-family:var(--f-body);background:var(--sea)}
+.leaflet-control-attribution{font-size:10px}
+.pin{position:relative;width:46px;height:54px;display:block;cursor:pointer}
+.pin .b{position:absolute;left:0;top:0;width:46px;height:46px;border-radius:50%;background:var(--surface);border:3px solid var(--accent);box-shadow:var(--shadow);overflow:hidden;display:grid;place-items:center;color:var(--accent)}
+.pin .b img{width:100%;height:100%;object-fit:cover;display:block}
+.pin .t{position:absolute;left:17px;top:40px;width:12px;height:12px;background:var(--accent);transform:rotate(45deg);border-radius:2px}
+.pin .n{position:absolute;right:-6px;top:-6px;background:var(--ink);color:var(--bg);font-size:11px;font-weight:700;border-radius:999px;min-width:20px;height:20px;padding:0 5px;display:grid;place-items:center}
+.map-float{position:absolute;left:12px;right:12px;display:flex;justify-content:center;pointer-events:none;z-index:2}
+.map-float > *{pointer-events:auto}
+.map-float.topf{top:10px}
+.map-float.bot{bottom:14px}
+.pill{background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-size:13px;box-shadow:var(--shadow);display:flex;gap:10px;align-items:center}
+.pill b{font-variant-numeric:tabular-nums}
+.otd{background:var(--surface);border-radius:16px;box-shadow:var(--shadow);padding:10px 12px;display:flex;gap:10px;align-items:center;max-width:420px;width:100%;border:1px solid var(--line);text-align:left}
+.otd img,.otd .ph{width:48px;height:48px;border-radius:10px;object-fit:cover;flex:none;background:var(--accent-soft)}
+.otd small{display:block;color:var(--accent);font-weight:600;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase}
+.zoomctl{position:absolute;z-index:2;right:12px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:6px}
+.zoomctl button{width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow);font-size:18px;display:grid;place-items:center}
+
+/* generic */
+h2.sec{font-family:var(--f-display);font-weight:600;font-size:22px;margin:14px 0 8px;letter-spacing:-.01em}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px}
+.muted{color:var(--muted)}
+.btn{border:0;border-radius:12px;padding:12px 16px;font-weight:600;background:var(--accent);color:var(--on-accent)}
+.btn.ghost{background:var(--sunk);color:var(--ink)}
+.btn.small{padding:7px 12px;font-size:13.5px;border-radius:10px}
+.btn.danger{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+.btn:disabled{opacity:.5}
+.row{display:flex;gap:10px;align-items:center}
+.notice{background:var(--accent-soft);border-radius:12px;padding:10px 12px;font-size:13.5px;margin:6px 0 10px}
+
+/* timeline */
+.tl{position:relative;padding-left:0}
+.tl-year{font-family:var(--f-display);font-size:28px;font-weight:600;color:var(--muted);margin:18px 0 6px 64px}
+.tl-item{display:grid;grid-template-columns:52px 1fr;gap:12px;align-items:center;padding:8px 0;position:relative;width:100%;background:none;border:0;text-align:left}
+.tl-item::before{content:"";position:absolute;left:25px;top:0;bottom:0;width:2px;background:var(--line)}
+.tl-dot{width:52px;height:52px;border-radius:50%;border:3px solid var(--accent);background:var(--surface);overflow:hidden;display:grid;place-items:center;position:relative;z-index:1;color:var(--accent)}
+.tl-dot img{width:100%;height:100%;object-fit:cover}
+.tl-dot.ms{background:var(--accent);color:var(--on-accent)}
+.tl-body{min-width:0}
+.tl-title{font-weight:600;font-size:15.5px}
+.tl-meta{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl-tags{display:flex;gap:6px;margin-top:3px;flex-wrap:wrap}
+.tag{font-size:11.5px;background:var(--sunk);border-radius:999px;padding:1px 8px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* stats */
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tile{padding:12px 8px;text-align:center}
+.tile b{display:block;font-family:var(--f-display);font-size:26px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.1}
+.tile span{font-size:12px;color:var(--muted)}
+.bars{display:grid;gap:8px;padding:12px 14px}
+.bar{display:grid;grid-template-columns:80px 1fr 64px;gap:10px;align-items:center;font-size:13.5px}
+.bar .tr{height:10px;background:var(--sunk);border-radius:6px;overflow:hidden}
+.bar .tr i{display:block;height:100%;background:var(--accent);border-radius:6px}
+.bar .v{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+.fav{overflow:hidden;position:relative;min-height:120px;display:flex;align-items:flex-end;background:var(--accent-soft);border:0;width:100%;padding:0;text-align:left}
+.fav img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.fav .ov{position:relative;padding:14px;width:100%;background:linear-gradient(transparent,rgba(20,8,10,.7));color:#fff}
+.fav .ov small{opacity:.85;font-size:12px}
+.fav .ov div{font-family:var(--f-display);font-size:22px;font-weight:600}
+
+/* journeys */
+.leg{display:grid;grid-template-columns:34px 1fr auto;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
+.leg:last-child{border-bottom:0}
+.leg .ic{width:34px;height:34px;border-radius:50%;background:var(--accent-soft);display:grid;place-items:center;font-size:16px}
+.leg .mi{font-variant-numeric:tabular-nums;font-weight:600;text-align:right}
+.leg .mi small{display:block;font-weight:400;color:var(--muted);font-size:11.5px}
+.bigmiles{font-family:var(--f-display);font-size:44px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
+
+/* sheets / pages */
+.page{position:fixed;inset:0;background:var(--bg);z-index:20;display:flex;flex-direction:column;max-width:720px;margin:0 auto;padding-top:env(safe-area-inset-top,0px)}
+.page-head{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line)}
+.page-head h3{flex:1;margin:0;font-family:var(--f-display);font-weight:600;font-size:19px;text-align:center}
+.iconbtn{width:40px;height:40px;border-radius:50%;border:0;background:transparent;display:grid;place-items:center}
+.iconbtn svg{width:22px;height:22px}
+.page-body{flex:1;overflow-y:auto;padding:12px 16px 40px}
+.page-foot{padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);display:flex;gap:10px}
+.page-foot .btn{flex:1}
+
+/* form */
+.f{display:grid;gap:6px;margin-bottom:16px}
+.f > label,.lab{font-size:12.5px;font-weight:600;color:var(--muted);letter-spacing:.03em;text-transform:uppercase}
+.inp{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:11px 12px;min-width:0}
+textarea.inp{min-height:84px;resize:vertical}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 12px;font-size:14px}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.two > *{min-width:0}
+.pf{position:relative}
+.sugg{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:5;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
+.sugg button{display:block;width:100%;text-align:left;border:0;background:none;padding:10px 12px;border-bottom:1px solid var(--line);font-size:14px}
+.sugg button:last-child{border-bottom:0}
+.sugg button small{color:var(--muted);margin-left:6px}
+.sugg button.act{color:var(--accent);font-weight:600}
+.placed{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:9px 10px 9px 12px}
+.placed .grow{flex:1;min-width:0}
+.placed small{display:block;color:var(--muted);font-size:12px}
+.thumbs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.thumbs .th{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--sunk);max-width:100%}
+.thumbs .th img{width:100%;height:100%;object-fit:cover;display:block}
+.play{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}
+.play span{width:34px;height:34px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;display:grid;place-items:center;font-size:14px;padding-left:3px}
+.gallery button{position:relative}
+.lb video{max-width:100%;max-height:100%}
+.thumbs .th button{position:absolute;right:4px;top:4px;width:24px;height:24px;border-radius:50%;border:0;background:rgba(0,0,0,.6);color:#fff;font-size:14px;line-height:1}
+.thumbs label.addph{aspect-ratio:1;border:2px dashed var(--line);border-radius:10px;display:grid;place-items:center;color:var(--muted);font-size:13px;text-align:center;cursor:pointer}
+.rate{display:grid;grid-template-columns:1fr 64px;gap:12px;align-items:center}
+.rate input{width:100%;accent-color:var(--accent)}
+.rate output{font-family:var(--f-display);font-size:28px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+.rate output small{font-size:14px;color:var(--muted)}
+.legform{border:1px solid var(--line);border-radius:14px;padding:12px;background:var(--surface);display:grid;gap:10px;margin-bottom:10px}
+.legform .hd{display:flex;align-items:center;justify-content:space-between;font-weight:600}
+.legform .mrow{display:flex;gap:10px;align-items:center;font-size:13.5px;color:var(--muted)}
+.legform .mrow input{width:90px}
+
+/* detail */
+.hero{position:relative;aspect-ratio:4/3;background:var(--accent-soft);max-width:100%;overflow:hidden;margin:-12px -16px 0;width:calc(100% + 32px)}
+.hero img{width:100%;height:100%;object-fit:cover;display:block}
+.hero .nophoto{position:absolute;inset:0;display:grid;place-items:center;color:var(--accent);opacity:.6}
+.d-title{font-family:var(--f-display);font-size:28px;font-weight:600;margin:14px 0 2px;line-height:1.15;text-wrap:balance}
+.d-meta{color:var(--muted);font-size:14px}
+.d-story{margin:12px 0;max-width:65ch;white-space:pre-wrap}
+.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+.facts > div{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:9px 10px;min-width:0}
+.facts small{display:block;color:var(--muted);font-size:11.5px}
+.facts b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ratingbox{padding:12px 14px;margin:12px 0}
+.ratingbox .scores{display:flex;gap:18px;align-items:baseline;flex-wrap:wrap}
+.ratingbox .scores div b{font-family:var(--f-display);font-size:30px;font-weight:600;font-variant-numeric:tabular-nums}
+.ratingbox .scores div span{color:var(--muted);font-size:13px;display:block}
+.gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:8px}
+.gallery button{aspect-ratio:1;padding:0;border:0;background:var(--sunk);border-radius:8px;overflow:hidden;max-width:100%}
+.gallery img{width:100%;height:100%;object-fit:cover;display:block}
+.fav-moment{border-left:3px solid var(--accent);padding:4px 0 4px 12px;font-family:var(--f-display);font-style:italic;font-size:17px;margin:12px 0}
+
+/* lightbox / picker */
+.lb{position:fixed;inset:0;background:#0b0708;z-index:40;display:flex;align-items:center;justify-content:center}
+.lb img{max-width:100%;max-height:100%;object-fit:contain}
+.lb .x{position:absolute;top:calc(10px + env(safe-area-inset-top,0px));right:10px;color:#fff;background:rgba(255,255,255,.15)}
+.lb .nv{position:absolute;top:50%;transform:translateY(-50%);color:#fff;background:rgba(255,255,255,.15)}
+.lb .nv.l{left:8px}.lb .nv.r{right:8px}
+.lb .cnt{position:absolute;bottom:calc(16px + env(safe-area-inset-bottom,0px));color:#fff;font-size:13px;opacity:.8}
+.picker .stage{flex:1;position:relative}
+.cross{position:absolute;z-index:2;left:50%;top:50%;width:34px;height:42px;margin:-42px 0 0 -17px;pointer-events:none;color:var(--accent);filter:drop-shadow(0 2px 3px rgba(0,0,0,.3))}
+.picker .search{position:absolute;left:12px;right:12px;top:10px;z-index:3}
+.picker .readout{position:absolute;left:12px;right:12px;bottom:12px;z-index:3;padding:10px 12px;text-align:center;font-size:14px}
+
+/* onboarding / empty */
+.center{min-height:100%;display:grid;place-items:center;padding:24px 16px;text-align:center}
+.who{display:grid;gap:10px;max-width:320px;margin:16px auto 0}
+.who .btn{font-size:18px;padding:16px}
+.empty{max-width:340px;padding:16px;text-align:center}
+.empty h3{font-family:var(--f-display);font-size:22px;margin:0 0 6px}
+.toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:999px;font-size:14px;z-index:60;box-shadow:var(--shadow)}
+.confirm{position:fixed;inset:0;background:rgba(10,4,6,.45);z-index:50;display:grid;place-items:center;padding:16px}
+.confirm .card{padding:18px;max-width:340px;width:100%}
+.confirm h4{margin:0 0 6px;font-family:var(--f-display);font-size:20px}
+.busy{position:fixed;inset:0;background:rgba(10,4,6,.35);z-index:55;display:grid;place-items:center}
+.busy .card{padding:16px 20px}
+@media (max-width:380px){.tiles{grid-template-columns:repeat(2,1fr)}.facts{grid-template-columns:1fr 1fr}}
+@media (prefers-reduced-motion:no-preference){.pin .b{transition:transform .15s}.pin:active .b{transform:scale(.94)}}
+.login{max-width:340px;width:100%;text-align:left}
+.login .f{margin-bottom:12px}
+.err{color:var(--accent);font-size:13.5px;min-height:1.2em}
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+  <header class="top">
+    <div class="grow">
+      <div class="couple" id="coupleName">Spish <span class="h">♥</span> Ollie</div>
+      <div class="since" id="sinceLine">Every place has a memory</div>
+    </div>
+    <button class="me-chip" id="meChip" type="button" hidden></button>
+  </header>
+  <main>
+    <section class="view" id="v-map"><div class="map" id="mainMap"></div>
+      <div class="map-float topf" id="otdWrap"></div>
+      <div class="map-float bot" id="mapSummary"></div>
+    </section>
+    <section class="view" id="v-timeline" hidden><div class="pad" id="timeline"></div></section>
+    <section class="view" id="v-miles" hidden><div class="pad" id="miles"></div></section>
+    <section class="view" id="v-us" hidden><div class="pad" id="us"></div></section>
+  </main>
+  <nav class="tabs" id="tabs" aria-label="Sections">
+    <button type="button" data-tab="map" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>Map</button>
+    <button type="button" data-tab="timeline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="12" r="2"/><circle cx="6" cy="19" r="2"/><path d="M11 5h9M11 12h9M11 19h9"/></svg>Timeline</button>
+    <button type="button" class="add" id="addBtn" aria-label="Add a memory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button type="button" data-tab="miles"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h14l-1.5-6.5a2 2 0 0 0-2-1.5h-7a2 2 0 0 0-2 1.5z"/><circle cx="8" cy="17.5" r="1.8"/><circle cx="16" cy="17.5" r="1.8"/></svg>Miles</button>
+    <button type="button" data-tab="us"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>Us</button>
+  </nav>
+</div>
+<div id="layer"></div>
+
+<script>
+"use strict";
+/* ---------- helpers ---------- */
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const HEART='<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 21s-8-5-8-11.2A4.6 4.6 0 0 1 12 7a4.6 4.6 0 0 1 8 2.8C20 16 12 21 12 21z"/></svg>';
+const PINSVG='<svg viewBox="0 0 34 42" width="34" height="42"><path d="M17 41S3 25.5 3 16a14 14 0 0 1 28 0c0 9.5-14 25-14 25z" fill="currentColor"/><circle cx="17" cy="16" r="5.5" fill="#fff"/></svg>';
+const ICON={back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+ close:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+ edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
+ left:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 5l-7 7 7 7"/></svg>',
+ right:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg>'};
+const MODES=[["car","🚗","Car",1.22],["train","🚆","Train",1.15],["plane","✈️","Plane",1.0],["bus","🚌","Bus/coach",1.25],["ferry","⛴️","Ferry",1.05],["walk","🚶","Walk",1.2],["bike","🚲","Bike",1.2]];
+const CATS=[
+ ["datenight","🌙","Date night",{cocktail:true,ph:"Friday date night"}],
+ ["dinner","🍝","Dinner out",{ph:"Dinner at Le Relais"}],
+ ["cocktail","🍸","New cocktail",{cocktail:true,home:true,ph:"Cocktail night"}],
+ ["outfit","👗","Outfit check",{home:true,ph:"Outfit check"}],
+ ["dayout","🎡","Day out",{ph:"Day at the museum"}],
+ ["movie","🎬","Movie night",{home:true,ph:"Film night"}],
+ ["cooking","🍳","Cooking together",{home:true,ph:"Homemade pasta night"}],
+ ["trip","✈️","Trip away",{trip:true,ph:"Weekend in West Wales"}],
+ ["milestone","❤️","Milestone",{home:true,ph:"Became official"}],
+ ["other","✨","Something else",{ph:"Sunset walk"}]];
+const CAT=Object.fromEntries(CATS.map(c=>[c[0],{icon:c[1],label:c[2],...c[3]}]));
+const catOf=m=>m.category&&CAT[m.category]?m.category:m.kind==="trip"?"trip":m.kind==="milestone"?"milestone":"datenight";
+const MODE=Object.fromEntries(MODES.map(m=>[m[0],{icon:m[1],label:m[2],f:m[3]}]));
+const fmtDate=(d,o={day:"numeric",month:"short",year:"numeric"})=>{if(!d)return"";const [y,m,dd]=d.split("-").map(Number);return new Date(y,m-1,dd).toLocaleDateString("en-GB",o)};
+const todayStr=()=>{const t=new Date();return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`};
+const addDays=(d,n)=>{const [y,m,dd]=d.split("-").map(Number);const t=new Date(y,m-1,dd+n);return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`};
+const hav=(a,b)=>{const R=3958.8,r=Math.PI/180,dLat=(b.lat-a.lat)*r,dLng=(b.lng-a.lng)*r;const h=Math.sin(dLat/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dLng/2)**2;return 2*R*Math.asin(Math.sqrt(h))};
+const legMiles=l=>l.miles!=null&&l.manual?Number(l.miles):(l.from&&l.to?Math.round(hav(l.from,l.to)*(MODE[l.mode]?.f||1.2)):0);
+const memMiles=m=>(m.journeys||[]).reduce((s,l)=>s+legMiles(l),0);
+const fmtN=n=>Math.round(n).toLocaleString("en-GB");
+function toast(msg){const t=document.createElement("div");t.className="toast";t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2600)}
+function confirmBox(title,body,okLabel){return new Promise(res=>{const w=document.createElement("div");w.className="confirm";w.innerHTML=`<div class="card"><h4>${esc(title)}</h4><p class="muted">${esc(body)}</p><div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn ghost small" data-a="0">Cancel</button><button class="btn small" data-a="1">${esc(okLabel)}</button></div></div>`;w.addEventListener("click",e=>{const b=e.target.closest("[data-a]");if(b||e.target===w){w.remove();res(b?.dataset.a==="1")}});document.body.appendChild(w)})}
+function busy(msg){const w=document.createElement("div");w.className="busy";w.innerHTML=`<div class="card">${esc(msg)}</div>`;document.body.appendChild(w);return{set:m=>w.firstChild.textContent=m,done:()=>w.remove()}}
+
+/* ---------- geography ---------- */
+const norm=s=>s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ").trim();
+const PLACES=(window.PLACES_DATA||[]).map(s=>{const p=s.split("|");return{n:p[0],lat:+p[1],lng:+p[2],r:p[3],pop:+(p[4]||0),local:p.length===4,k:norm(p[0])}});
+function searchPlaces(q){const nq=norm(q);if(nq.length<2)return[];const out=[];for(const p of PLACES){let s=-1;if(p.k===nq)s=0;else if(p.k.startsWith(nq))s=1;else if(nq.length>=3&&(" "+p.k).includes(" "+nq))s=2;if(s<0)continue;out.push([s,p.local?0:1,-p.pop,p])}out.sort((a,b)=>a[0]-b[0]||a[1]-b[1]||a[2]-b[2]);return out.slice(0,6).map(x=>x[3])}
+function nearestPlace(lat,lng){let best=null,bd=1e9;const c=Math.cos(lat*Math.PI/180);for(const p of PLACES){const d=(p.lat-lat)**2+((p.lng-lng)*c)**2;if(d<bd&&(p.local||p.pop>15000||d<0.02)){bd=d;best=p}}return best}
+// OpenStreetMap search for landmarks, venues and addresses (used only when you tap "Search maps")
+async function searchOnline(q){const r=await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=en-GB&q=${encodeURIComponent(q)}`);if(!r.ok)throw new Error("search failed");const j=await r.json();return j.map(x=>{const parts=x.display_name.split(",").map(t=>t.trim());return{name:x.name||parts[0],area:parts.slice(1).filter(t=>!/^\d/.test(t)).slice(0,2).concat(parts.slice(-1)).filter((v,i,a)=>a.indexOf(v)===i).join(", "),lat:+(+x.lat).toFixed(5),lng:+(+x.lon).toFixed(5)}})}
+
+/* ---------- map view (Leaflet + OpenStreetMap) ---------- */
+function MapView(el,{onPin,picker,onMove}={}){
+  const dark=()=>{const t=document.documentElement.dataset.theme;return t?t==="dark":matchMedia("(prefers-color-scheme: dark)").matches};
+  const m=L.map(el,{zoomControl:false,worldCopyJump:true,tap:true}).setView([52.4,-3.2],6);
+  L.tileLayer(`https://{s}.basemaps.cartocdn.com/${dark()?"dark_all":"rastertiles/voyager"}/{z}/{x}/{y}{r}.png`,{subdomains:"abcd",maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'}).addTo(m);
+  const pinLayer=L.layerGroup().addTo(m),routeLayer=L.layerGroup().addTo(m);
+  const accent=()=>getComputedStyle(document.documentElement).getPropertyValue("--route").trim()||"#c7323e";
+  m.on("move",()=>onMove&&onMove());
+  const api={
+    set(list,routes){
+      pinLayer.clearLayers();routeLayer.clearLayers();
+      const groups={};for(const it of list.filter(x=>x.lat!=null)){const k=it.lat.toFixed(4)+","+it.lng.toFixed(4);(groups[k]=groups[k]||[]).push(it)}
+      for(const g of Object.values(groups)){g.sort((a,b)=>(b.date||"").localeCompare(a.date||""));const it=g[0];const img=g.find(x=>x.thumb)?.thumb;
+        const html=`<div class="pin"><span class="t"></span><span class="b">${img?`<img src="${img}" alt="">`:`<span style="font-size:22px">${CAT[catOf(it)].icon}</span>`}</span>${g.length>1?`<span class="n">${g.length}</span>`:""}</div>`;
+        const mk=L.marker([it.lat,it.lng],{icon:L.divIcon({className:"",html,iconSize:[46,54],iconAnchor:[23,54]}),title:it.title,keyboard:true,riseOnHover:true}).addTo(pinLayer);
+        if(onPin)mk.on("click",()=>onPin(it,g.length>1?g:null))}
+      for(const r of routes||[]){const a=[r.from.lat,r.from.lng],b=[r.to.lat,r.to.lng];
+        L.polyline([a,b],{color:accent(),weight:3,opacity:.75,dashArray:r.mode==="plane"?"2 9":"7 8",lineCap:"round",interactive:false}).addTo(routeLayer);
+        [a,b].forEach(p=>L.circleMarker(p,{radius:4,color:accent(),weight:2,fillColor:"#fff",fillOpacity:1,interactive:false}).addTo(routeLayer))}
+    },
+    fit(pts,anim){m.invalidateSize();if(!pts.length)return m.fitBounds([[50,-8.2],[58.7,1.8]],{animate:!!anim});m.fitBounds(L.latLngBounds(pts.map(p=>[p.lat,p.lng])),{padding:[70,70],maxZoom:pts.length===1?13:12,animate:!!anim})},
+    center(){const c=m.getCenter();return{lat:c.lat,lng:c.lng}},
+    goTo(lat,lng,z){m.invalidateSize();m.flyTo([lat,lng],z&&z<=19?z:15,{duration:.6})},
+    zoomBy(f){f>1?m.zoomIn():m.zoomOut()},
+    resize(){m.invalidateSize()}
+  };
+  new ResizeObserver(()=>{if(el.clientWidth)m.invalidateSize()}).observe(el);
+  return api;
+}
+
+/* ---------- state + store (Supabase) ---------- */
+const S={couple:{nameA:"Spish",nameB:"Ollie",met:"",since:""},people:{},memories:[],uid:null,role:null,mode:"loading",canWrite:true,tab:"map"};
+const nameOf=r=>r==="a"?S.couple.nameA||"Spish":r==="b"?S.couple.nameB||"Ollie":"Both of us";
+const other=r=>r==="a"?"b":"a";
+const CFG=window.MEMORY_MAP_CONFIG||{};
+const configured=!!(CFG.supabaseUrl&&CFG.supabaseKey&&!/YOUR/.test(CFG.supabaseUrl+CFG.supabaseKey));
+const LOGIN_DOMAIN=CFG.loginDomain||"memorymap.local";
+let sb=null;const urlCache={};const photoListeners=new Set();
+const DEMO=[
+ {id:"ex1",kind:"milestone",title:"We met",date:"2023-01-03",story:"Example memory. Replace it with how you actually met.",place:null},
+ {id:"ex5",kind:"date",category:"cocktail",title:"Cocktail before the cinema",date:"2025-11-08",place:null,cocktail:{name:"Passionfruit spritz",ingredients:"Passionfruit, prosecco, a splash of vanilla vodka, lime"},plannedBy:"a",ratings:{a:9,b:10},story:"Example. Made while getting ready."},
+ {id:"ex2",kind:"date",category:"dinner",title:"First date",date:"2023-02-14",place:{name:"Cardiff Bay",area:"Cardiff, Wales",lat:51.4637,lng:-3.1650},venue:"Dinner by the water",story:"Example memory so you can see how the map works.",plannedBy:"b",ratings:{a:9,b:8},favourite:"Walking back along the barrage"},
+ {id:"ex3",kind:"trip",title:"Weekend in West Wales",date:"2024-07-19",endDate:"2024-07-21",place:{name:"Tenby",area:"Wales",lat:51.6727,lng:-4.7031},story:"Example trip with a journey for each day.",plannedBy:"both",ratings:{a:10,b:9},
+   journeys:[{date:"2024-07-19",from:{name:"Cardiff",lat:51.48,lng:-3.18},to:{name:"Tenby",lat:51.6727,lng:-4.7031},mode:"car"},{date:"2024-07-20",from:{name:"Tenby",lat:51.6727,lng:-4.7031},to:{name:"St Davids",lat:51.8818,lng:-5.2659},mode:"car"},{date:"2024-07-21",from:{name:"St Davids",lat:51.8818,lng:-5.2659},to:{name:"Cardiff",lat:51.48,lng:-3.18},mode:"car"}]},
+ {id:"ex4",kind:"date",title:"Natural History Museum",date:"2025-09-26",place:{name:"Natural History Museum",area:"London, England",lat:51.4967,lng:-0.1764},story:"Example. Train up for the day.",plannedBy:"a",ratings:{a:8},
+   journeys:[{date:"2025-09-26",from:{name:"Cardiff",lat:51.48,lng:-3.18},to:{name:"London",lat:51.5072,lng:-0.1276},mode:"train"},{date:"2025-09-26",from:{name:"London",lat:51.5072,lng:-0.1276},to:{name:"Cardiff",lat:51.48,lng:-3.18},mode:"train"}]}
+];
+
+async function init(){
+  renderAll();map.fit([]);
+  if(!configured||!window.supabase){S.mode="demo";S.role="a";S.memories=DEMO.map(m=>({...m,example:true}));renderAll();map.fit(points(),false);return}
+  sb=window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseKey,{auth:{persistSession:true,autoRefreshToken:true}});
+  sb.auth.onAuthStateChange((ev)=>{if(ev==="PASSWORD_RECOVERY")setNewPassword();if(ev==="SIGNED_OUT")location.reload()});
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session)return showLogin();
+  startLive(session.user);
+}
+function roleFromUser(u){const handle=(u.email||"").split("@")[0].toLowerCase();if(handle===(S.couple.nameA||"").toLowerCase()||handle==="spish")return"a";if(handle===(S.couple.nameB||"").toLowerCase()||handle==="ollie")return"b";return null}
+async function startLive(u){
+  S.uid=u.id;S.mode="live";renderHeader();
+  await Promise.all([loadCouple(),loadMembers(),loadMemories()]);
+  map.fit(points(),false);
+  if(!S.role){const r=roleFromUser(u);if(r){await sb.from("mm_members").upsert({user_id:S.uid,who:r});S.role=r;renderAll()}else askWho()}
+  sb.channel("memory-map")
+    .on("postgres_changes",{event:"*",schema:"public",table:"mm_memories"},()=>loadMemories())
+    .on("postgres_changes",{event:"*",schema:"public",table:"mm_couple"},()=>loadCouple())
+    .on("postgres_changes",{event:"*",schema:"public",table:"mm_members"},()=>loadMembers())
+    .on("postgres_changes",{event:"*",schema:"public",table:"mm_media"},()=>photoListeners.forEach(f=>f()))
+    .subscribe();
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden){loadMemories();loadCouple()}});
+}
+async function loadMemories(){const {data,error}=await sb.from("mm_memories").select("id,doc");if(error)return err(error);S.memories=data.map(r=>({...r.doc,id:r.id}));renderAll()}
+async function loadCouple(){const {data,error}=await sb.from("mm_couple").select("doc").eq("id",1).maybeSingle();if(error)return err(error);if(data)S.couple={...S.couple,...data.doc};renderHeader();if(S.tab==="us")renderUs()}
+async function loadMembers(){const {data,error}=await sb.from("mm_members").select("user_id,who");if(error)return err(error);S.people={};(data||[]).forEach(r=>S.people[r.user_id]=r);S.role=S.people[S.uid]?.who||S.role;renderHeader()}
+async function signedUrls(paths){const need=paths.filter(p=>!urlCache[p]);if(need.length){const {data}=await sb.storage.from("memory-map").createSignedUrls(need,60*60*12);(data||[]).forEach(d=>{if(d.signedUrl)urlCache[d.path]=d.signedUrl})}return paths.map(p=>urlCache[p])}
+async function loadPhotos(mid){const {data,error}=await sb.from("mm_media").select("id,path,ord,kind").eq("memory_id",mid).order("ord");if(error){err(error);return[]}const urls=await signedUrls(data.map(d=>d.path));return data.map((d,i)=>({id:d.id,path:d.path,kind:d.kind||"photo",data:urls[i]}))}
+function err(e){console.warn(e);toast(e?.message?"Couldn’t load: "+e.message:"Something went wrong. Try again.")}
+
+function showLogin(){
+  const p=openPage(`<div class="center"><form class="login" id="lf" novalidate>
+    <div class="couple" style="font-size:34px;text-align:center">Spish <span class="h">♥</span> Ollie</div>
+    <p class="muted" style="text-align:center;margin:6px 0 20px">Spish &amp; Ollie’s Memory Map</p>
+    <div class="f"><label for="lu">Your name</label><input class="inp" id="lu" autocomplete="username" autocapitalize="none" placeholder="Spish or Ollie" required></div>
+    <div class="f"><label for="lp">Password</label><input class="inp" id="lp" type="password" autocomplete="current-password" required></div>
+    <div class="err" id="le" role="alert"></div>
+    <button class="btn" style="width:100%" type="submit" id="lb">Log in</button>
+  </form></div>`);
+  $("#lf",p).addEventListener("submit",async e=>{e.preventDefault();const u=$("#lu",p).value.trim().toLowerCase(),pw=$("#lp",p).value;if(!u||!pw){$("#le",p).textContent="Enter your name and password.";return}
+    const email=u.includes("@")?u:`${u}@${LOGIN_DOMAIN}`;$("#lb",p).disabled=true;$("#le",p).textContent="";
+    const {data,error}=await sb.auth.signInWithPassword({email,password:pw});$("#lb",p).disabled=false;
+    if(error){$("#le",p).textContent=error.message==="Invalid login credentials"?"That name and password don’t match. Check the spelling and try again.":error.message;return}
+    p.remove();startLive(data.user)});
+}
+function setNewPassword(){
+  const p=openPage(`<div class="center"><form class="login" id="nf"><h2 class="sec">Choose a new password</h2><div class="f"><label for="np">New password</label><input class="inp" id="np" type="password" autocomplete="new-password"></div><div class="err" id="ne"></div><button class="btn" style="width:100%" type="submit">Save password</button></form></div>`);
+  $("#nf",p).addEventListener("submit",async e=>{e.preventDefault();const {error}=await sb.auth.updateUser({password:$("#np",p).value});if(error){$("#ne",p).textContent=error.message;return}p.remove();toast("Password changed")});
+}
+
+/* ---------- rendering ---------- */
+const map=MapView($("#mainMap"),{onPin:(m,all)=>all&&all.length>1?openList(all):openDetail(m.id)});
+$("#v-map").insertAdjacentHTML("beforeend",`<div class="zoomctl"><button type="button" aria-label="Zoom in" id="zin">+</button><button type="button" aria-label="Zoom out" id="zout">−</button><button type="button" aria-label="Show all memories" id="zfit" style="font-size:13px">All</button></div>`);
+$("#zin").onclick=()=>map.zoomBy(2);$("#zout").onclick=()=>map.zoomBy(.5);$("#zfit").onclick=()=>map.fit(points(),true);
+const points=()=>S.memories.filter(m=>m.place).map(m=>({lat:m.place.lat,lng:m.place.lng}));
+const sortedMems=()=>[...S.memories].sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+
+function renderHeader(){
+  $("#coupleName").innerHTML=`${esc(S.couple.nameA||"Spish")} <span class="h">♥</span> ${esc(S.couple.nameB||"Ollie")}`;
+  let since="Every place has a memory";
+  const daysSince=d=>{const [y,m,dd]=d.split("-").map(Number);return Math.max(0,Math.floor((Date.now()-new Date(y,m-1,dd))/864e5))};
+  if(S.couple.since)since=`Together since ${fmtDate(S.couple.since,{day:"numeric",month:"long",year:"numeric"})} · ${fmtN(daysSince(S.couple.since))} days`;
+  else if(S.couple.met)since=`First met ${fmtDate(S.couple.met,{day:"numeric",month:"long",year:"numeric"})} · ${fmtN(daysSince(S.couple.met))} days`;
+  $("#sinceLine").textContent=since;
+  const chip=$("#meChip");
+  if(S.mode==="demo"){chip.hidden=false;chip.textContent="Preview"}
+  else if(S.role){chip.hidden=false;chip.textContent="You’re "+nameOf(S.role)}
+  else chip.hidden=true;
+}
+function renderMap(){
+  const items=S.memories.filter(m=>m.place).map(m=>({...m,lat:m.place.lat,lng:m.place.lng}));
+  const routes=S.memories.flatMap(m=>(m.journeys||[]).filter(l=>l.from&&l.to));
+  map.set(items,routes);
+  const total=S.memories.reduce((s,m)=>s+memMiles(m),0);
+  $("#mapSummary").innerHTML=S.memories.length?`<div class="pill"><span><b>${S.memories.length}</b> ${S.memories.length===1?"memory":"memories"}</span><span class="muted">·</span><span><b>${fmtN(total)}</b> miles together</span></div>`:
+   `<div class="card empty"><h3>Your map is empty</h3><p class="muted">Add the first place you went together and it will appear here as a pin.</p><button class="btn" type="button" onclick="openForm()">Add your first memory</button></div>`;
+  const md=todayStr().slice(5);const otd=S.memories.filter(m=>m.date&&m.date.slice(5)===md&&m.date<todayStr());
+  if(otd.length){const m=otd[0];const yrs=Number(todayStr().slice(0,4))-Number(m.date.slice(0,4));$("#otdWrap").innerHTML=`<button class="otd" type="button" onclick="openDetail('${esc(m.id)}')">${m.thumb?`<img src="${m.thumb}" alt="">`:`<span class="ph"></span>`}<span><small>On this day · ${yrs} year${yrs>1?"s":""} ago</small><b>${esc(m.title)}</b><br><span class="muted">${esc(m.place?.name||fmtDate(m.date))}</span></span></button>`}
+  else $("#otdWrap").innerHTML=S.mode==="demo"?`<div class="notice" style="box-shadow:var(--shadow);max-width:420px">Preview with example memories. Open the published link to start your real map.</div>`:"";
+}
+function ratingTags(m){const r=m.ratings||{};const mine=S.role?r[S.role]:null,theirs=S.role?r[other(S.role)]:null;if(mine!=null&&theirs!=null)return`<span class="tag">♥ ${((mine+theirs)/2).toFixed(1)}/10</span>`;if(mine!=null)return`<span class="tag">You: ${mine}/10</span>`;if(theirs!=null)return`<span class="tag">${esc(nameOf(other(S.role)))} rated</span>`;return""}
+var tlFilter="all";
+function renderTimeline(){
+  const all=sortedMems();const present=CATS.filter(c=>all.some(m=>catOf(m)===c[0]));if(tlFilter!=="all"&&!present.some(c=>c[0]===tlFilter))tlFilter="all";
+  const ms=tlFilter==="all"?all:all.filter(m=>catOf(m)===tlFilter);
+  const filt=present.length>1?`<div class="chips" style="flex-wrap:nowrap;overflow-x:auto;margin:6px -16px 4px;padding:0 16px 4px">${[["all","","All"],...present].map(c=>`<button type="button" class="chip" style="white-space:nowrap" onclick="tlFilter='${c[0]}';renderTimeline()" aria-pressed="${tlFilter===c[0]}">${c[1]} ${esc(c[2])}</button>`).join("")}</div>`:"";
+  if(!ms.length){$("#timeline").innerHTML=`<h2 class="sec">Our timeline</h2><p class="muted">Every memory you add lands here in order, from the day you met onwards.</p>`;return}
+  let h=`<h2 class="sec">Our timeline</h2><p class="muted" style="margin-top:-4px">Scroll to replay it from the start.</p>${filt}<div class="tl">`;let yr="";
+  for(const m of ms){const y=(m.date||"").slice(0,4);if(y!==yr){yr=y;h+=`<div class="tl-year">${esc(y)}</div>`}
+    const mi=memMiles(m);
+    h+=`<button class="tl-item" type="button" onclick="openDetail('${esc(m.id)}')"><span class="tl-dot ${m.kind==="milestone"?"ms":""}">${m.thumb?`<img src="${m.thumb}" alt="">`:m.kind==="milestone"?HEART:`<span style="font-size:22px">${CAT[catOf(m)].icon}</span>`}</span><span class="tl-body"><span class="tl-title">${esc(m.title)}</span><span class="tl-meta" style="display:block">${esc(fmtDate(m.date))}${m.endDate&&m.endDate!==m.date?" – "+esc(fmtDate(m.endDate)):""}${m.place?" · "+esc(m.place.name):""}</span><span class="tl-tags"><span class="tag">${CAT[catOf(m)].icon} ${esc(CAT[catOf(m)].label)}</span>${m.cocktail?.name&&catOf(m)!=="cocktail"?`<span class="tag">🍸 ${esc(m.cocktail.name)}</span>`:""}${ratingTags(m)}${mi?`<span class="tag">${fmtN(mi)} mi</span>`:""}${m.photoCount?`<span class="tag">${m.photoCount} photo${m.photoCount>1?"s":""}</span>`:""}${m.videoCount?`<span class="tag">${m.videoCount} video${m.videoCount>1?"s":""}</span>`:""}${m.example?`<span class="tag">Example</span>`:""}</span></span></button>`}
+  $("#timeline").innerHTML=h+"</div>";
+}
+function renderMiles(){
+  const legs=sortedMems().flatMap(m=>(m.journeys||[]).map(l=>({...l,mem:m}))).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  const total=legs.reduce((s,l)=>s+legMiles(l),0);
+  const by={};legs.forEach(l=>by[l.mode]=(by[l.mode]||0)+legMiles(l));
+  const max=Math.max(1,...Object.values(by));
+  let h=`<h2 class="sec">Miles together</h2><div class="card" style="padding:16px;margin-bottom:12px"><div class="bigmiles">${fmtN(total)}</div><div class="muted">miles across ${legs.length} journey${legs.length===1?"":"s"}${total>=24901?` · that’s ${(total/24901).toFixed(1)}× round the Earth`:total>0?` · ${Math.round(total/24901*100)}% of the way round the Earth`:""}</div></div>`;
+  if(legs.length){h+=`<div class="card bars">${MODES.filter(m=>by[m[0]]).map(m=>`<div class="bar"><span>${m[1]} ${m[2]}</span><span class="tr"><i style="width:${by[m[0]]/max*100}%"></i></span><span class="v">${fmtN(by[m[0]])} mi</span></div>`).join("")}</div><h2 class="sec" style="font-size:18px">Every journey</h2><div class="card">`;
+    h+=legs.map(l=>`<button type="button" class="leg" style="width:100%;background:none;border:0;border-bottom:1px solid var(--line);text-align:left" onclick="openDetail('${esc(l.mem.id)}')"><span class="ic">${MODE[l.mode]?.icon||"•"}</span><span style="min-width:0"><b>${esc(l.from?.name||"?")} → ${esc(l.to?.name||"?")}</b><br><span class="muted" style="font-size:13px">${esc(fmtDate(l.date))} · ${esc(l.mem.title)}</span></span><span class="mi">${fmtN(legMiles(l))}<small>miles</small></span></button>`).join("")+`</div>`}
+  else h+=`<p class="muted">When you add a memory, log each day’s journey: where you set off from, where you went and how you got there. The miles add up here.</p>`;
+  h+=`<p class="muted" style="font-size:12.5px;margin-top:12px">Miles are estimated from the straight-line distance with an allowance for roads and rail. You can type the exact figure on any journey.</p>`;
+  $("#miles").innerHTML=h;
+}
+function renderUs(){
+  const ms=S.memories,legs=ms.flatMap(m=>m.journeys||[]);
+  const placeKeys=new Set(ms.filter(m=>m.place).map(m=>(m.place.area||m.place.name).split(",")[0].trim()));
+  const countries=new Set(ms.filter(m=>m.place).map(m=>{const a=(m.place.area||"").split(",").pop().trim();return["England","Wales","Scotland","Northern Ireland","UK"].includes(a)?"United Kingdom":a}).filter(Boolean));
+  const photos=ms.reduce((s,m)=>s+(m.photoCount||0)+(m.videoCount||0),0);
+  const avg=r=>{const v=ms.map(m=>m.ratings?.[r]).filter(x=>x!=null);return v.length?(v.reduce((a,b)=>a+b,0)/v.length).toFixed(1):"–"};
+  const scored=ms.map(m=>{const v=Object.values(m.ratings||{});return[m,v.length?v.reduce((a,b)=>a+b,0)/v.length+v.length*.01:-1]}).filter(x=>x[1]>=0).sort((a,b)=>b[1]-a[1]);
+  const fav=scored[0]?.[0];
+  const tiles=[[ms.length,"Memories"],[placeKeys.size,"Places"],[countries.size,"Countries"],[fmtN(legs.reduce((s,l)=>s+legMiles(l),0)),"Miles"],[photos,"Photos & videos"],[ms.filter(m=>m.cocktail?.name).length,"Cocktails"]];
+  const book=[...ms].filter(m=>m.cocktail?.name).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  let h=`<h2 class="sec">Us in numbers</h2><div class="tiles">${tiles.map(t=>`<div class="card tile"><b>${t[0]}</b><span>${t[1]}</span></div>`).join("")}</div>
+  <div class="card" style="margin-top:8px;padding:12px 14px;display:flex;justify-content:space-around;text-align:center"><div><div class="bigmiles" style="font-size:30px">${avg("a")}</div><span class="muted" style="font-size:13px">${esc(nameOf("a"))}’s average rating</span></div><div><div class="bigmiles" style="font-size:30px">${avg("b")}</div><span class="muted" style="font-size:13px">${esc(nameOf("b"))}’s average rating</span></div></div>`;
+  if(fav)h+=`<h2 class="sec" style="font-size:18px">Favourite date so far</h2><button class="card fav" type="button" onclick="openDetail('${esc(fav.id)}')">${fav.thumb?`<img src="${fav.thumb}" alt="">`:""}<div class="ov"><small>${esc(fmtDate(fav.date))}${fav.place?" · "+esc(fav.place.name):""}</small><div>${esc(fav.title)}</div></div></button>`;
+  h+=`<h2 class="sec" style="font-size:18px">Our cocktail book</h2>`+(book.length?`<div class="card">${book.map(m=>`<button type="button" class="leg" style="width:100%;background:none;border:0;border-bottom:1px solid var(--line);text-align:left" onclick="openDetail('${esc(m.id)}')"><span class="ic">🍸</span><span style="min-width:0"><b>${esc(m.cocktail.name)}</b><br><span class="muted" style="font-size:13px">${esc(m.cocktail.ingredients||"")}${m.cocktail.ingredients?" · ":""}${esc(fmtDate(m.date))}</span></span><span class="mi">${m.ratings&&Object.keys(m.ratings).length===2?(Object.values(m.ratings).reduce((a,b)=>a+b,0)/2).toFixed(1):""}<small>${m.ratings&&Object.keys(m.ratings).length===2?"/10":""}</small></span></button>`).join("")}</div>`:`<p class="muted">Every cocktail you make before a date gets saved here with its recipe. Add one as a “New cocktail”, or fill in the cocktail on a date night.</p>`);
+  const ro=S.mode!=="live"||!S.canWrite;
+  h+=`<h2 class="sec" style="font-size:18px">About us</h2><div class="card" style="padding:14px">
+   <div class="two"><div class="f"><label for="nA">Name 1</label><input class="inp" id="nA" value="${esc(S.couple.nameA)}" ${ro?"disabled":""}></div><div class="f"><label for="nB">Name 2</label><input class="inp" id="nB" value="${esc(S.couple.nameB)}" ${ro?"disabled":""}></div></div>
+   <div class="f"><label for="met">First met</label><input class="inp" type="date" id="met" value="${esc(S.couple.met||"")}" ${ro?"disabled":""}></div>
+   <div class="f"><label for="since">Together officially</label><input class="inp" type="date" id="since" value="${esc(S.couple.since||"")}" ${ro?"disabled":""}><span class="muted" style="font-size:12.5px">Leave this empty for now. When you make it official, add the date and the top of the map will switch to “Together since”.</span></div>
+   <button class="btn small" type="button" id="saveUs" ${ro?"disabled":""}>Save</button></div>`;
+  if(S.mode==="live"&&S.uid)h+=`<div class="card" style="padding:14px;margin-top:10px"><div class="row" style="justify-content:space-between"><span>Signed in as <b>${esc(S.role?nameOf(S.role):"…")}</b></span><button class="btn ghost small" type="button" onclick="sb.auth.signOut()">Log out</button></div></div>`;
+  h+=`<p class="muted" style="font-size:12.5px;margin-top:14px">Only the two of you can log in. Everything either of you adds shows up for the other straight away.</p>`;
+  $("#us").innerHTML=h;
+  const sv=$("#saveUs");if(sv)sv.onclick=async()=>{const d={nameA:$("#nA").value.trim()||"Spish",nameB:$("#nB").value.trim()||"Ollie",met:$("#met").value||"",since:$("#since").value||""};if(S.mode==="demo"){S.couple=d;renderHeader();toast("Saved for this preview only");return}const {error}=await sb.from("mm_couple").upsert({id:1,doc:d});if(error)return toast("Couldn’t save. Check your connection and try again.");S.couple=d;renderHeader();toast("Saved")};
+}
+function renderAll(){renderHeader();renderMap();if(S.tab==="timeline")renderTimeline();if(S.tab==="miles")renderMiles();if(S.tab==="us")renderUs()}
+
+function setTab(t){S.tab=t;$$("#tabs [data-tab]").forEach(x=>x.dataset.tab===t?x.setAttribute("aria-current","page"):x.removeAttribute("aria-current"));$$(".view").forEach(v=>v.hidden=v.id!=="v-"+t);renderAll()}
+$("#tabs").addEventListener("click",e=>{const b=e.target.closest("[data-tab]");if(b)setTab(b.dataset.tab)});
+$("#addBtn").onclick=()=>openForm();
+$("#meChip").onclick=()=>{if(S.mode==="live")askWho()};
+
+/* ---------- layers ---------- */
+function openPage(html,cls=""){const p=document.createElement("div");p.className="page "+cls;p.innerHTML=html;$("#layer").appendChild(p);return p}
+function askWho(){
+  const p=openPage(`<div class="center"><div><div class="couple" style="font-size:34px">${esc(S.couple.nameA)} <span class="h">♥</span> ${esc(S.couple.nameB)}</div><p class="muted" style="max-width:300px;margin:8px auto">Which one of you is this? It decides whose rating is whose, and it’s remembered on this account.</p><div class="who"><button class="btn" data-w="a">I’m ${esc(nameOf("a"))}</button><button class="btn" data-w="b">I’m ${esc(nameOf("b"))}</button>${S.role?`<button class="btn ghost" data-w="">Cancel</button>`:""}</div></div></div>`);
+  p.addEventListener("click",async e=>{const b=e.target.closest("[data-w]");if(!b)return;if(b.dataset.w){const {error}=await sb.from("mm_members").upsert({user_id:S.uid,who:b.dataset.w});if(error)toast("Couldn’t save that. Try again.");else S.role=b.dataset.w}p.remove();renderAll()});
+}
+function openList(ms){
+  const p=openPage(`<div class="page-head"><button class="iconbtn" data-x aria-label="Close">${ICON.close}</button><h3>${esc(ms[0].place?.name||"Here")}</h3><span style="width:40px"></span></div><div class="page-body"><p class="muted">${ms.length} memories at this spot</p><div class="tl">${ms.sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(m=>`<button class="tl-item" type="button" data-id="${esc(m.id)}"><span class="tl-dot">${m.thumb?`<img src="${m.thumb}" alt="">`:HEART}</span><span class="tl-body"><span class="tl-title">${esc(m.title)}</span><span class="tl-meta" style="display:block">${esc(fmtDate(m.date))}</span></span></button>`).join("")}</div></div>`);
+  p.addEventListener("click",e=>{if(e.target.closest("[data-x]"))return p.remove();const b=e.target.closest("[data-id]");if(b){p.remove();openDetail(b.dataset.id)}});
+}
+
+/* ---------- detail ---------- */
+function openDetail(id){
+  const m0=S.memories.find(x=>x.id===id);if(!m0)return;
+  let photos=[],unsub=null;
+  const p=openPage(`<div class="page-head"><button class="iconbtn" data-x aria-label="Back">${ICON.back}</button><h3></h3><button class="iconbtn" data-edit aria-label="Edit">${ICON.edit}</button></div><div class="page-body" id="dBody"></div>`);
+  const draw=()=>{const m=S.memories.find(x=>x.id===id);if(!m){p.remove();return}
+    const r=m.ratings||{},me=S.role,them=me?other(me):"b";const mine=me?r[me]:null,theirs=r[them];
+    let rate="";
+    if(mine!=null&&theirs!=null)rate=`<div class="scores"><div><b>${mine}</b><span>${esc(nameOf(me))}</span></div><div><b>${theirs}</b><span>${esc(nameOf(them))}</span></div><div><b style="color:var(--accent)">${((mine+theirs)/2).toFixed(1)}</b><span>Together, out of 10</span></div></div>`;
+    else if(mine!=null)rate=`<div class="scores"><div><b>${mine}</b><span>Your rating</span></div></div><p class="muted" style="margin:6px 0 0">Waiting for ${esc(nameOf(them))}’s rating. You’ll both see the scores once they’ve rated.</p>`;
+    else rate=`<p style="margin:0 0 8px">${theirs!=null?`<b>${esc(nameOf(them))} has rated this.</b> Add yours to see both scores.`:"Neither of you has rated this yet."}</p>${S.role?`<div class="rate"><input type="range" min="1" max="10" value="7" id="qr" aria-label="Your rating out of 10"><output id="qro">7<small>/10</small></output></div><button class="btn small" type="button" id="qrs" style="margin-top:8px">Save my rating</button>`:""}`;
+    const legs=m.journeys||[];
+    const hero=photos.find(x=>x.kind!=="video")?.data||m.thumb;
+    $("#dBody",p).innerHTML=`<div class="hero">${hero?`<img src="${hero}" alt="">`:`<div class="nophoto">${HEART}</div>`}</div>
+      <div class="tag" style="display:inline-block;margin-top:12px">${CAT[catOf(m)].icon} ${esc(CAT[catOf(m)].label)}</div><div class="d-title" style="margin-top:6px">${esc(m.title)}</div><div class="d-meta">${esc(fmtDate(m.date,{weekday:"long",day:"numeric",month:"long",year:"numeric"}))}${m.endDate&&m.endDate!==m.date?" – "+esc(fmtDate(m.endDate)):""}${m.place?`<br>📍 ${esc(m.place.name)}${m.place.area&&m.place.area!==m.place.name?", "+esc(m.place.area):""}`:""}</div>
+      ${m.example?`<div class="notice" style="margin-top:10px">This is an example memory for the preview.</div>`:""}
+      ${m.story?`<div class="d-story">${esc(m.story)}</div>`:""}
+      ${m.cocktail?.name?`<div class="card" style="padding:12px 14px;margin:12px 0;display:flex;gap:12px"><span style="font-size:26px">🍸</span><span style="min-width:0"><span class="lab">${catOf(m)==="cocktail"?"The cocktail":"Cocktail of the night"}</span><br><b style="font-family:var(--f-display);font-size:19px">${esc(m.cocktail.name)}</b>${m.cocktail.ingredients?`<br><span class="muted" style="white-space:pre-wrap">${esc(m.cocktail.ingredients)}</span>`:""}</span></div>`:""}
+      ${m.favourite?`<div class="fav-moment">“${esc(m.favourite)}”</div>`:""}
+      <div class="facts">${m.venue?`<div><small>Restaurant / activity</small><b>${esc(m.venue)}</b></div>`:""}${m.plannedBy?`<div><small>${catOf(m)==="cocktail"?"Made by":"Planned by"}</small><b>${esc(nameOf(m.plannedBy))}</b></div>`:""}${legs.length?`<div><small>Travelled</small><b>${fmtN(memMiles(m))} miles</b></div>`:""}</div>
+      ${m.kind!=="milestone"||Object.keys(r).length?`<div class="card ratingbox"><div class="lab" style="margin-bottom:6px">Our rating</div>${rate}</div>`:""}
+      ${legs.length?`<div class="lab" style="margin:14px 0 6px">Journeys</div><div class="card">${legs.map((l,i)=>`<div class="leg"><span class="ic">${MODE[l.mode]?.icon||"•"}</span><span style="min-width:0"><b>${esc(l.from?.name||"?")} → ${esc(l.to?.name||"?")}</b><br><span class="muted" style="font-size:13px">${legs.length>1?`Day ${legs.filter(x=>x.date<=l.date).map(x=>x.date).filter((v,j,a)=>a.indexOf(v)===j).length} · `:""}${esc(fmtDate(l.date))} · ${esc(MODE[l.mode]?.label||"")}</span></span><span class="mi">${fmtN(legMiles(l))}<small>miles</small></span></div>`).join("")}</div>`:""}
+      ${m.photoCount||m.videoCount||photos.length?`<div class="lab" style="margin:16px 0 0">Photos${m.videoCount?" & videos":""}</div><div class="gallery">${photos.length?photos.map((ph,i)=>ph.kind==="video"?`<button type="button" data-ph="${i}" aria-label="Video ${i+1}"><video src="${ph.data}#t=0.1" muted playsinline preload="metadata" style="width:100%;height:100%;object-fit:cover"></video><span class="play"><span>▶</span></span></button>`:`<button type="button" data-ph="${i}" aria-label="Photo ${i+1}"><img src="${ph.data}" alt="" loading="lazy"></button>`).join(""):`<p class="muted">Loading photos…</p>`}</div>`:""}
+      <div style="margin-top:24px"><button class="btn danger small" type="button" data-del ${S.mode==="live"&&!S.canWrite?"hidden":""}>Delete memory</button></div>`;
+    $("h3",p).textContent=m.place?.name||m.title;
+    const qr=$("#qr",p);if(qr){qr.oninput=()=>$("#qro",p).innerHTML=qr.value+"<small>/10</small>";$("#qrs",p).onclick=async()=>{const v=+qr.value;if(S.mode==="demo"){m.ratings={...r,[S.role]:v};draw();return toast("Rating saved")}const {error}=await sb.rpc("mm_set_rating",{mid:id,who:S.role,val:v});if(error)return toast("Couldn’t save your rating");toast("Rating saved");loadMemories()}}
+  };
+  draw();
+  if(S.mode==="live"){const lp=async()=>{photos=await loadPhotos(id);if(p.isConnected)draw()};lp();photoListeners.add(lp);unsub=()=>photoListeners.delete(lp)}
+  const stopWatch=setInterval(()=>{if(!p.isConnected){clearInterval(stopWatch);unsub&&unsub()}},1500);
+  p.redraw=draw;
+  p.addEventListener("click",async e=>{
+    if(e.target.closest("[data-x]")){p.remove();unsub&&unsub();return}
+    if(e.target.closest("[data-edit]")){openForm(S.memories.find(x=>x.id===id),photos);return}
+    const ph=e.target.closest("[data-ph]");if(ph){lightbox(photos,+ph.dataset.ph);return}
+    if(e.target.closest("[data-del]")){const ok=await confirmBox("Delete this memory?","Its photos and journeys go too. This can’t be undone.","Delete");if(!ok)return;
+      if(S.mode==="demo"){S.memories=S.memories.filter(x=>x.id!==id)}else{const b=busy("Deleting…");try{const {data:rows}=await sb.from("mm_media").select("path").eq("memory_id",id);if(rows?.length)await sb.storage.from("memory-map").remove(rows.map(r=>r.path));const {error}=await sb.from("mm_memories").delete().eq("id",id);if(error)throw error;await loadMemories()}catch(er){toast("Couldn’t delete. Try again.")}b.done()}
+      p.remove();unsub&&unsub();renderAll()}
+  });
+}
+// keep open detail pages in sync with live data
+const _renderAll=renderAll;renderAll=function(){_renderAll();$$("#layer .page").forEach(p=>p.redraw&&!p.querySelector("#qr:focus")&&p.redraw())};
+
+function lightbox(list,i){const w=document.createElement("div");w.className="lb";const show=()=>{const it=list[i];w.innerHTML=(it.kind==="video"?`<video src="${it.data}" controls playsinline autoplay></video>`:`<img src="${it.data}" alt="Photo ${i+1} of ${list.length}">`)+`<button class="iconbtn x" aria-label="Close">${ICON.close}</button>${list.length>1?`<button class="iconbtn nv l" aria-label="Previous">${ICON.left}</button><button class="iconbtn nv r" aria-label="Next">${ICON.right}</button><div class="cnt">${i+1} / ${list.length}</div>`:""}`};show();
+  w.addEventListener("click",e=>{if(e.target.closest(".x")||e.target===w)return w.remove();if(e.target.closest(".l")){i=(i-1+list.length)%list.length;show()}if(e.target.closest(".r")){i=(i+1)%list.length;show()}});
+  let sx=null;w.addEventListener("touchstart",e=>sx=e.touches[0].clientX,{passive:true});w.addEventListener("touchend",e=>{if(sx==null||e.target.closest("video"))return;const dx=e.changedTouches[0].clientX-sx;if(Math.abs(dx)>50){i=(i+(dx<0?1:-1)+list.length)%list.length;show()}sx=null});
+  document.body.appendChild(w)}
+
+/* ---------- place field ---------- */
+function placeField(host,value,onChange,{label="Search a town or place",allowCustom=true}={}){
+  let v=value;
+  const draw=()=>{
+    if(v){host.innerHTML=`<div class="placed"><span style="color:var(--accent)">${PINSVG.replace('width="34" height="42"','width="18" height="22"')}</span><span class="grow"><b>${esc(v.name)}</b><small>${esc(v.area||"")}</small></span><button type="button" class="btn ghost small" data-ch>Change</button></div>`;$("[data-ch]",host).onclick=()=>{const old=v;v=null;draw();const i=$("input",host);i.value=old.name;i.focus();onChange(null)};return}
+    host.innerHTML=`<div class="pf"><input class="inp" placeholder="${esc(label)}" autocomplete="off"><div class="sugg" hidden></div></div>`;
+    const inp=$("input",host),sg=$(".sugg",host);sg.addEventListener("pointerdown",e=>e.preventDefault());sg.addEventListener("mousedown",e=>e.preventDefault());
+    const upd=()=>{const q=inp.value.trim();if(!q){sg.hidden=true;return}const rs=searchPlaces(q);
+      sg.innerHTML=rs.map((p,i)=>`<button type="button" data-i="${i}">${esc(p.n)}<small>${esc(p.r)}</small></button>`).join("")+(allowCustom?`<button type="button" class="act" data-map>Pick “${esc(q)}” on the map</button>`:"")+(q.length>2&&S.mode==="live"?`<button type="button" class="act" data-web>Search maps for “${esc(q)}”</button>`:"");
+      sg.hidden=false;
+      $$("[data-i]",sg).forEach(b=>b.onclick=e=>{e.preventDefault();const p=rs[+b.dataset.i];set({name:p.n,area:p.r,lat:p.lat,lng:p.lng})});
+      const mb=$("[data-map]",sg);if(mb)mb.onclick=e=>{e.preventDefault();openPicker(q,null,set)};
+      const wb=$("[data-web]",sg);if(wb)wb.onclick=async e=>{e.preventDefault();wb.textContent="Searching…";try{const rs2=await searchOnline(q);sg.innerHTML=(rs2.length?rs2.map((r,i)=>`<button type="button" data-w="${i}">${esc(r.name)}<small>${esc(r.area)}</small></button>`).join(""):`<button type="button" disabled>No results for “${esc(q)}”</button>`)+(allowCustom?`<button type="button" class="act" data-map>Pick “${esc(q)}” on the map</button>`:"");$$("[data-w]",sg).forEach(b=>b.onclick=ev=>{ev.preventDefault();set(rs2[+b.dataset.w])});const mb2=$("[data-map]",sg);if(mb2)mb2.onclick=ev=>{ev.preventDefault();openPicker(q,null,set)}}catch(er){wb.textContent="Map search isn’t reachable. Pick it on the map instead."}};
+    };
+    inp.addEventListener("input",upd);inp.addEventListener("focus",upd);inp.addEventListener("blur",()=>setTimeout(()=>sg.hidden=true,200));
+  };
+  const set=x=>{v=x;draw();onChange(x)};
+  draw();
+  return{get:()=>v,set};
+}
+function openPicker(name,start,done){
+  const p=openPage(`<div class="page-head"><button class="iconbtn" data-x aria-label="Cancel">${ICON.close}</button><h3>Drop the pin</h3><span style="width:40px"></span></div><div class="stage"><div class="map" id="pmap"></div><span class="cross" aria-hidden="true">${PINSVG}</span><div class="search" id="psearch"></div><div class="card readout" id="pread"></div></div><div class="page-foot"><div style="flex:1;display:grid;gap:6px"><input class="inp" id="pname" value="${esc(name||"")}" placeholder="Name this place, e.g. Natural History Museum"><button class="btn" type="button" id="puse">Use this spot</button></div></div>`,"picker");
+  const pm=MapView($("#pmap",p),{picker:true,onMove:()=>rd()});
+  const rd=()=>{const c=pm.center();const n=nearestPlace(c.lat,c.lng);$("#pread",p).textContent=n?`Near ${n.n}, ${n.r}`:`${c.lat.toFixed(3)}, ${c.lng.toFixed(3)}`};
+  pm.set(S.memories.filter(m=>m.place).map(m=>({...m,lat:m.place.lat,lng:m.place.lng})),[]);
+  requestAnimationFrame(()=>{if(start)pm.goTo(start.lat,start.lng,16);else{const pts=points();pts.length?pm.fit(pts):pm.fit([])}rd()});
+  placeField($("#psearch",p),null,x=>{if(x){pm.goTo(x.lat,x.lng,x.area&&!PLACES.some(p=>p.n===x.name)?17:14);if(!$("#pname",p).value)$("#pname",p).value=x.name}},{label:"Jump to a town",allowCustom:false});
+  p.addEventListener("click",e=>{if(e.target.closest("[data-x]"))p.remove()});
+  $("#puse",p).onclick=()=>{const c=pm.center();const n=nearestPlace(c.lat,c.lng);const nm=$("#pname",p).value.trim()||n?.n||"Dropped pin";done({name:nm,area:start?.area||(n?`${n.n}, ${n.r}`:""),lat:+c.lat.toFixed(5),lng:+c.lng.toFixed(5)});p.remove()};
+}
+
+/* ---------- photos ---------- */
+async function compress(file,maxSide,maxChars,q0=.84){
+  let bmp;try{bmp=await createImageBitmap(file,{imageOrientation:"from-image"})}catch(e){bmp=await new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=URL.createObjectURL(file)})}
+  const w0=bmp.width,h0=bmp.height;let side=maxSide,q=q0,out="";
+  for(let tries=0;tries<8;tries++){const s=Math.min(1,side/Math.max(w0,h0));const c=document.createElement("canvas");c.width=Math.round(w0*s);c.height=Math.round(h0*s);c.getContext("2d").drawImage(bmp,0,0,c.width,c.height);out=c.toDataURL("image/jpeg",q);if(out.length<=maxChars)break;if(q>.6)q-=.1;else side=Math.round(side*.8)}
+  return out}
+function videoPoster(file){return new Promise(res=>{const v=document.createElement("video");v.muted=true;v.playsInline=true;v.preload="auto";const url=URL.createObjectURL(file);let done=false;const fin=x=>{if(done)return;done=true;URL.revokeObjectURL(url);res(x)};
+  v.onloadeddata=()=>{try{v.currentTime=Math.min(0.5,(v.duration||1)/2)}catch(e){fin("")}};
+  v.onseeked=()=>{try{const s=Math.min(1,640/Math.max(v.videoWidth,v.videoHeight));const c=document.createElement("canvas");c.width=Math.round(v.videoWidth*s);c.height=Math.round(v.videoHeight*s);c.getContext("2d").drawImage(v,0,0,c.width,c.height);fin(c.toDataURL("image/jpeg",.75))}catch(e){fin("")}};
+  v.onerror=()=>fin("");setTimeout(()=>fin(""),6000);v.src=url})}
+async function makeThumb(dataUrl){const im=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=dataUrl});const S2=200,c=document.createElement("canvas");c.width=c.height=S2;const s=Math.min(im.width,im.height);c.getContext("2d").drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,S2,S2);return c.toDataURL("image/jpeg",.72)}
+
+/* ---------- form ---------- */
+function openForm(m,existingPhotos){
+  if(S.mode==="live"&&!S.canWrite){toast("You have view-only access to this map");return}
+  if(S.mode==="live"&&!S.role){askWho();return}
+  const isNew=!m;
+  const f={kind:"date",category:"datenight",cocktail:{name:"",ingredients:""},title:"",date:todayStr(),endDate:"",place:null,venue:"",story:"",favourite:"",plannedBy:"",journeys:[],...(m?JSON.parse(JSON.stringify(m)):{})};
+  f.category=m?catOf(m):"datenight";f.cocktail={name:"",ingredients:"",...(f.cocktail||{})};
+  let myRating=m?.ratings?.[S.role]??null;
+  let photos=(existingPhotos||[]).map(p=>({id:p.id,path:p.path,kind:p.kind||"photo",data:p.data}));const removed=[];
+  const p=openPage(`<div class="page-head"><button class="iconbtn" data-x aria-label="Cancel">${ICON.close}</button><h3>${isNew?"Add a memory":"Edit memory"}</h3><span style="width:40px"></span></div>
+  <form class="page-body" id="mf" novalidate>
+    <div class="f"><label for="fcat">What was it?</label><select class="inp" id="fcat">${CATS.map(c=>`<option value="${c[0]}" ${f.category===c[0]?"selected":""}>${c[1]}  ${esc(c[2])}</option>`).join("")}</select></div>
+    <div class="f"><label for="ftitle">Title</label><input class="inp" id="ftitle" required placeholder="Sunset dinner" value="${esc(f.title)}"></div>
+    <div class="two"><div class="f"><label for="fdate">Date</label><input class="inp" type="date" id="fdate" value="${esc(f.date)}"></div><div class="f" id="endWrap"><label for="fend">Last day</label><input class="inp" type="date" id="fend" value="${esc(f.endDate||"")}"></div></div>
+    <div class="f"><span class="lab" id="placeLab">Where</span><div id="fplace"></div></div>
+    <div class="f" id="ckWrap"><span class="lab" id="ckLab">Cocktail of the night</span><input class="inp" id="ckName" placeholder="Name it, e.g. Passionfruit spritz" value="${esc(f.cocktail.name)}" aria-label="Cocktail name"><textarea class="inp" id="ckIng" placeholder="What went in it" style="min-height:64px" aria-label="Cocktail ingredients">${esc(f.cocktail.ingredients)}</textarea><span class="muted" style="font-size:12.5px" id="ckHint">Made one while getting ready? It goes in your cocktail book.</span></div>
+    <div class="f" id="venueWrap"><label for="fvenue">Restaurant or activity</label><input class="inp" id="fvenue" placeholder="Le Relais" value="${esc(f.venue)}"></div>
+    <div class="f"><label for="fstory">What we did</label><textarea class="inp" id="fstory" placeholder="Drinks by the sea, then dinner and a walk through town">${esc(f.story)}</textarea></div>
+    <div class="f"><label for="ffav">Favourite moment</label><input class="inp" id="ffav" placeholder="Watching the lights come on" value="${esc(f.favourite)}"></div>
+    <div class="f"><span class="lab">Photos & videos</span><div class="thumbs" id="fph"></div><span class="muted" style="font-size:12.5px">Videos can be up to 50 MB each, roughly 30 seconds filmed on a phone.</span></div>
+    <div class="f" id="rateWrap"><span class="lab">Your rating</span><label class="row" style="font-size:14px;text-transform:none;letter-spacing:0;font-weight:400;color:var(--ink)"><input type="checkbox" id="frateOn" ${myRating!=null||isNew?"checked":""}> Include my rating</label><div class="rate" id="rateBox"><input type="range" min="1" max="10" id="frate" value="${myRating??7}" aria-label="Your rating out of 10"><output id="frateo">${myRating??7}<small>/10</small></output></div><span class="muted" style="font-size:12.5px">Out of 10. ${esc(nameOf(other(S.role||"a")))} won’t see your score until they’ve added theirs.</span></div>
+    <div class="f" id="planWrap"><span class="lab" id="planLab">Who planned it?</span><div class="chips" id="plan">${["a","b","both"].map(k=>`<button type="button" class="chip" data-p="${k}" aria-pressed="${f.plannedBy===k}">${esc(nameOf(k))}</button>`).join("")}</div></div>
+    <div class="f"><span class="lab">Getting there</span><span class="muted" style="font-size:13px;margin-top:-2px">Add each day’s journey: where you set off from, where you went and how. Miles are worked out for you.</span><div id="legs"></div><button type="button" class="btn ghost" id="addLeg">+ Add a day’s journey</button></div>
+  </form>
+  <div class="page-foot"><button class="btn" type="button" id="fsave">${isNew?"Save memory":"Save changes"}</button></div>`);
+  const pf=placeField($("#fplace",p),f.place,x=>{f.place=x;if(x&&!$("#ftitle",p).value)$("#ftitle",p).value=x.name},{label:"Search or name the place"});
+  const syncKind=()=>{const c=CAT[f.category];f.kind=c.trip?"trip":f.category==="milestone"?"milestone":"date";
+    $("#endWrap",p).style.visibility=c.trip?"visible":"hidden";$("#placeLab",p).textContent=c.home?"Where (optional, skip it if you were at home)":"Where";
+    $("#venueWrap",p).hidden=!!c.home;$("#planWrap",p).hidden=f.category==="milestone";$("#planLab",p).textContent=f.category==="cocktail"?"Who made it?":f.category==="outfit"?"Whose idea?":"Who planned it?";
+    $("#ckWrap",p).hidden=!c.cocktail;$("#ckLab",p).textContent=f.category==="cocktail"?"The cocktail":"Cocktail of the night (optional)";$("#ckHint",p).hidden=f.category==="cocktail";
+    $("#ftitle",p).placeholder=c.ph};
+  syncKind();
+  $("#fcat",p).onchange=e=>{f.category=e.target.value;syncKind()};
+  $("#plan",p).onclick=e=>{const c=e.target.closest("[data-p]");if(c){f.plannedBy=f.plannedBy===c.dataset.p?"":c.dataset.p;$$("#plan .chip",p).forEach(x=>x.setAttribute("aria-pressed",x.dataset.p===f.plannedBy))}};
+  const rOn=$("#frateOn",p),rb=$("#rateBox",p),rr=$("#frate",p);const syncR=()=>rb.style.opacity=rOn.checked?1:.4;syncR();rOn.onchange=syncR;rr.oninput=()=>{rOn.checked=true;syncR();$("#frateo",p).innerHTML=rr.value+"<small>/10</small>"};
+  // photos
+  const drawPh=()=>{$("#fph",p).innerHTML=photos.map((ph,i)=>`<div class="th">${ph.kind==="video"?(ph.poster?`<img src="${ph.poster}" alt="">`:`<video src="${ph.data}#t=0.1" muted playsinline preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>`)+`<span class="play"><span>▶</span></span>`:`<img src="${ph.data}" alt="">`}<button type="button" data-rm="${i}" aria-label="Remove">×</button></div>`).join("")+`<label class="addph" for="fphin">+ Add photos<br>or videos</label><input type="file" id="fphin" accept="image/*,video/*" multiple hidden>`;
+    $("#fphin",p).onchange=async e=>{const files=[...e.target.files];if(!files.length)return;const b=busy(`Preparing ${files.length} file${files.length>1?"s":""}…`);for(const [i,file] of files.entries()){b.set(`Preparing ${i+1} of ${files.length}…`);try{if(file.type.startsWith("video/")){if(file.size>50*1024*1024){toast(`That video is ${Math.round(file.size/1048576)} MB. Videos need to be under 50 MB, so trim it first.`);continue}photos.push({kind:"video",file,data:URL.createObjectURL(file),poster:await videoPoster(file)})}else photos.push({kind:"photo",data:await compress(file,2000,1400000,.86)})}catch(er){toast("One file couldn’t be read")}}b.done();drawPh()}};
+  $("#fph",p).addEventListener("click",e=>{const r=e.target.closest("[data-rm]");if(r){const [x]=photos.splice(+r.dataset.rm,1);if(x.id)removed.push(x);drawPh()}});
+  drawPh();
+  // journeys
+  const legs=f.journeys;const legFields=[];
+  const drawLegs=()=>{const host=$("#legs",p);host.innerHTML="";legFields.length=0;
+    legs.forEach((l,i)=>{const d=document.createElement("div");d.className="legform";
+      d.innerHTML=`<div class="hd"><span>Day ${[...new Set(legs.slice(0,i+1).map(x=>x.date))].length} journey</span><button type="button" class="btn ghost small" data-rml>Remove</button></div>
+      <div class="f" style="margin:0"><label>Date</label><input class="inp" type="date" data-ld value="${esc(l.date||"")}"></div>
+      <div class="f" style="margin:0"><span class="lab">Where did you set off from?</span><div data-from></div></div>
+      <div class="f" style="margin:0"><span class="lab">Where were you going?</span><div data-to></div></div>
+      <div class="f" style="margin:0"><span class="lab">How did you get there?</span><div class="chips">${MODES.map(md=>`<button type="button" class="chip" data-m="${md[0]}" aria-pressed="${l.mode===md[0]}">${md[1]} ${md[2]}</button>`).join("")}</div></div>
+      <div class="mrow"><span data-auto></span><span style="flex:1"></span><label>Exact miles <input class="inp" type="number" min="0" inputmode="numeric" data-mi value="${l.manual?esc(l.miles):""}" placeholder="auto"></label></div>`;
+      host.appendChild(d);
+      const auto=()=>{const n=l.from&&l.to?Math.round(hav(l.from,l.to)*(MODE[l.mode]?.f||1.2)):null;$("[data-auto]",d).textContent=l.manual?`${fmtN(l.miles)} miles (your figure)`:n!=null?`≈ ${fmtN(n)} miles`:"Pick both places to see the miles"};
+      placeField($("[data-from]",d),l.from,x=>{l.from=x&&{name:x.name,lat:x.lat,lng:x.lng};auto()},{label:"Town, station or airport"});
+      placeField($("[data-to]",d),l.to,x=>{l.to=x&&{name:x.name,lat:x.lat,lng:x.lng};auto()},{label:"Town, station or airport"});
+      $("[data-ld]",d).onchange=e=>l.date=e.target.value;
+      $("[data-mi]",d).oninput=e=>{const v=e.target.value;if(v===""){l.manual=false;delete l.miles}else{l.manual=true;l.miles=Number(v)}auto()};
+      d.addEventListener("click",e=>{const c=e.target.closest("[data-m]");if(c){l.mode=c.dataset.m;$$("[data-m]",d).forEach(x=>x.setAttribute("aria-pressed",x===c));auto()}if(e.target.closest("[data-rml]")){legs.splice(i,1);drawLegs()}});
+      auto()})};
+  drawLegs();
+  $("#addLeg",p).onclick=()=>{const last=legs[legs.length-1];const start=$("#fdate",p).value||todayStr();
+    legs.push({date:last?(last.date&&(!$("#fend",p).value||last.date<$("#fend",p).value)?addDays(last.date,1):last.date):start,from:last?.to||null,to:null,mode:last?.mode||"car"});drawLegs();$("#legs",p).lastElementChild?.scrollIntoView({behavior:"smooth",block:"center"})};
+  p.addEventListener("click",e=>{if(e.target.closest("[data-x]"))p.remove()});
+  $("#mf",p).addEventListener("submit",e=>e.preventDefault());
+  $("#fsave",p).onclick=async()=>{
+    const ckName=$("#ckName",p).value.trim(),ckIng=$("#ckIng",p).value.trim(),C=CAT[f.category];
+    if(f.category==="cocktail"&&!$("#ftitle",p).value.trim()&&ckName)$("#ftitle",p).value=ckName;
+    const title=$("#ftitle",p).value.trim();if(!title){toast("Give it a title first");$("#ftitle",p).focus();return}
+    const date=$("#fdate",p).value;if(!date){toast("Add the date");return}
+    if(!C.home&&!f.place){toast("Pick where it was, so it can go on the map");return}
+    const doc={kind:f.kind,category:f.category,cocktail:C.cocktail&&ckName?{name:ckName,ingredients:ckIng}:null,title,date,endDate:f.kind==="trip"?($("#fend",p).value||""):"",place:f.place||null,venue:C.home?"":$("#fvenue",p).value.trim(),story:$("#fstory",p).value.trim(),favourite:$("#ffav",p).value.trim(),plannedBy:f.kind==="milestone"?"":f.plannedBy,
+      journeys:legs.filter(l=>l.from&&l.to).map(l=>({date:l.date||date,from:l.from,to:l.to,mode:l.mode||"car",...(l.manual?{manual:true,miles:l.miles}:{})})),
+      ratings:{...(m?.ratings||{})},photoCount:photos.length,updatedAt:new Date().toISOString(),updatedBy:S.role||"a"};
+    if(rOn.checked)doc.ratings[S.role||"a"]=+rr.value;else delete doc.ratings[S.role||"a"];
+    if(isNew){doc.createdAt=doc.updatedAt;doc.createdBy=S.role||"a"}
+    doc.photoCount=photos.filter(x=>x.kind!=="video").length;doc.videoCount=photos.filter(x=>x.kind==="video").length;
+    try{const f0=photos[0];doc.thumb=!f0?"":f0.id?(m?.thumb||""):f0.kind==="video"?(f0.poster?await makeThumb(f0.poster):""):await makeThumb(f0.data)}catch(e){doc.thumb=m?.thumb||""}
+    if(S.mode==="demo"){if(isNew)S.memories.push({...doc,id:"ex"+Date.now(),example:true});else Object.assign(S.memories.find(x=>x.id===m.id),doc);p.remove();renderAll();toast("Saved for this preview only");return}
+    const b=busy("Saving…");
+    try{
+      let mid=m?.id;
+      if(!isNew){const {data:cur}=await sb.from("mm_memories").select("doc").eq("id",mid).maybeSingle();const keep=cur?.doc?.ratings||m.ratings||{};const mine=doc.ratings[S.role];doc.ratings={...keep};if(rOn.checked)doc.ratings[S.role]=mine;else delete doc.ratings[S.role];doc.createdAt=m.createdAt||doc.updatedAt;doc.createdBy=m.createdBy||doc.updatedBy;
+        const {error}=await sb.from("mm_memories").update({doc,updated_at:new Date().toISOString()}).eq("id",mid);if(error)throw error}
+      else{const {data,error}=await sb.from("mm_memories").insert({doc}).select("id").single();if(error)throw error;mid=data.id}
+      if(removed.length){await sb.storage.from("memory-map").remove(removed.map(x=>x.path));await sb.from("mm_media").delete().in("id",removed.map(x=>x.id))}
+      let n=0,total=photos.filter(x=>!x.id).length;
+      for(const [i,ph] of photos.entries()){if(ph.id)continue;n++;b.set(`Uploading ${n} of ${total}${ph.kind==="video"?" (videos take a little longer)":""}…`);const isV=ph.kind==="video";const blob=isV?ph.file:await (await fetch(ph.data)).blob();const ext=isV?((ph.file.name.split(".").pop()||"mp4").toLowerCase()):"jpg";const path=`${mid}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+        const up=await sb.storage.from("memory-map").upload(path,blob,{contentType:isV?(ph.file.type||"video/mp4"):"image/jpeg"});if(up.error)throw up.error;const ins=await sb.from("mm_media").insert({memory_id:mid,path,ord:i,kind:isV?"video":"photo"});if(ins.error)throw ins.error}
+      await loadMemories();
+      b.done();p.remove();toast(isNew?"Memory saved":"Changes saved");
+      if(isNew){setTab("map");if(doc.place)setTimeout(()=>map.goTo(doc.place.lat,doc.place.lng),300)}
+    }catch(er){b.done();console.warn(er);toast("Couldn’t save: "+(er?.message||"check your connection and try again."))}
+  };
+}
+window.openForm=openForm;window.openDetail=openDetail;window.askWho=askWho;window.renderTimeline=renderTimeline;
+init();
+</script>
+</body>
+</html>
